@@ -1,0 +1,7 @@
+local.properties
+secrets.properties
+*.keystore
+google-services.json
+.gradle/
+build/
+.skills/

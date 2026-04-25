@@ -1,0 +1,11 @@
+node_modules/
+dist/
+build/
+.env
+.DS_Store
+*.log
+aegis-android/.gradle/
+aegis-android/build/
+aegis-android/app/build/
+aegis-android/local.properties
+aegis-android/.idea/

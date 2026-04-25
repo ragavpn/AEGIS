@@ -1,0 +1,98 @@
+import express from 'express';
+import { requireAuth } from '../middleware/auth.js';
+import { saveDeviceToken } from '../db/queries/tokens.js';
+import {
+  getNotifications,
+  markNotificationRead,
+  deleteDeviceToken,
+  insertNotification,
+} from '../db/queries/notifications.js';
+import logger from '../utils/logger.js';
+
+const router = express.Router();
+
+// All routes below require auth
+router.use(requireAuth);
+
+/**
+ * POST /notifications/register-token
+ * Register FCM device token — requires auth.
+ */
+router.post('/register-token', async (req, res) => {
+  const { token } = req.body;
+  if (!token || typeof token !== 'string') {
+    return res.status(400).json({ error: 'FCM token is required' });
+  }
+  try {
+    await saveDeviceToken(req.user.id, token);
+    res.json({ data: { success: true } });
+  } catch (error) {
+    logger.error(`[Notifications] register-token: ${error.message}`);
+    res.status(500).json({ error: 'Failed to register token' });
+  }
+});
+
+/**
+ * GET /notifications
+ * List notifications for the authenticated user with unread count.
+ */
+router.get('/', async (req, res) => {
+  try {
+    const notifications = await getNotifications(req.user.id);
+    const unreadCount = notifications.filter(n => !n.read).length;
+    res.json({ data: { notifications, unreadCount } });
+  } catch (error) {
+    logger.error(`[Notifications] GET /: ${error.message}`);
+    res.status(500).json({ error: 'Failed to fetch notifications' });
+  }
+});
+
+/**
+ * PATCH /notifications/:id/read
+ * Mark a single notification as read (ownership enforced in query).
+ */
+router.patch('/:id/read', async (req, res) => {
+  try {
+    await markNotificationRead(req.user.id, req.params.id);
+    res.json({ data: { success: true } });
+  } catch (error) {
+    logger.error(`[Notifications] PATCH /:id/read: ${error.message}`);
+    res.status(500).json({ error: 'Failed to mark notification as read' });
+  }
+});
+
+/**
+ * POST /notifications/seed-test
+ * DEV ONLY — Insert a dummy notification for the authenticated user.
+ * Returns the notification object including its ID for testing PATCH /read.
+ */
+router.post('/seed-test', async (req, res) => {
+  try {
+    const notification = await insertNotification(req.user.id, {
+      tier: 'ROUTINE',
+      title: '[TEST] Aegis Intelligence Update',
+      body: 'This is a seeded test notification for API validation.',
+      articleId: null,
+    });
+    res.json({ data: notification });
+  } catch (error) {
+    logger.error(`[Notifications] seed-test: ${error.message}`);
+    res.status(500).json({ error: 'Failed to seed test notification' });
+  }
+});
+
+/**
+ * DELETE /notifications/register-token
+ * Remove FCM token on sign-out.
+ */
+router.delete('/register-token', async (req, res) => {
+  try {
+    await deleteDeviceToken(req.user.id);
+    res.json({ data: { success: true } });
+  } catch (error) {
+    logger.error(`[Notifications] DELETE register-token: ${error.message}`);
+    res.status(500).json({ error: 'Failed to remove token' });
+  }
+});
+
+export default router;
