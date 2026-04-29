@@ -25,13 +25,13 @@ class PodcastViewModel @Inject constructor(
     private val _state = MutableStateFlow<PodcastState>(PodcastState.Idle)
     val state: StateFlow<PodcastState> = _state.asStateFlow()
 
-    fun generatePodcast(articleId: String) {
+    fun generatePodcast(articleId: String, durationScale: String = "default") {
         if (_state.value is PodcastState.Generating || _state.value is PodcastState.Ready) return
 
         viewModelScope.launch {
             _state.value = PodcastState.Generating
             try {
-                val response = apiService.generatePodcast(mapOf("article_id" to articleId))
+                val response = apiService.generatePodcast(mapOf("article_id" to articleId, "duration_scale" to durationScale))
                 val audioUrl = response["audio_url"]
                 if (audioUrl != null) {
                     _state.value = PodcastState.Ready(audioUrl)

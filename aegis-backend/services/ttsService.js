@@ -1,18 +1,7 @@
 import logger from '../utils/logger.js';
 import { supabase } from '../db/supabaseClient.js';
-import { generateDialogue } from './llmService.js';
-import ffmpeg from 'fluent-ffmpeg';
-import ffmpegStatic from 'ffmpeg-static';
-import ffprobeStatic from 'ffprobe-static';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
-import { promisify } from 'util';
 
-const writeFileAsync = promisify(fs.writeFile);
-const unlinkAsync = promisify(fs.unlink);
-
-export const generatePodcast = async (articleId, article) => {
+export const generatePodcast = async (articleId, article, durationScale = 'default') => {
   try {
     const apiKey = process.env.ELEVENLABS_API_KEY;
     if (!apiKey) {
@@ -44,15 +33,19 @@ export const generatePodcast = async (articleId, article) => {
       },
       body: JSON.stringify({
         model_id: "eleven_multilingual_v2",
-        mode: "conversational",
+        mode: {
+          type: "conversation",
+          conversation: {
+            host_voice_id: hostVoiceId,
+            guest_voice_id: guestVoiceId
+          }
+        },
         source: {
-          source_type: "text",
+          type: "text",
           text: sourceText
         },
-        duration_scale: "default",
-        language: "en",
-        host_voice_id: hostVoiceId,
-        guest_voice_id: guestVoiceId
+        duration_scale: durationScale,
+        language: "en"
       })
     });
 
@@ -62,7 +55,7 @@ export const generatePodcast = async (articleId, article) => {
     }
 
     const startData = await startResponse.json();
-    const podcastId = startData.podcast_id;
+    const podcastId = startData.project?.project_id || startData.podcast_id;
     
     if (!podcastId) {
         throw new Error("No podcast_id returned from ElevenLabs.");

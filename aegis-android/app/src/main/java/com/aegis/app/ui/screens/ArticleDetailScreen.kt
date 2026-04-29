@@ -65,6 +65,7 @@ fun ArticleDetailScreen(
     val context = LocalContext.current
     val exoPlayer = remember { ExoPlayer.Builder(context).build() }
     var isPlaying by remember { mutableStateOf(false) }
+    var selectedDuration by remember { mutableStateOf("default") }
 
     // ── Shared scroll state: used for verticalScroll AND scroll-depth calculation ──
     val scrollState = rememberScrollState()
@@ -218,8 +219,37 @@ fun ArticleDetailScreen(
                                 }
                             )
                         } else {
+                            if (podcastState !is PodcastState.Generating) {
+                                Text(
+                                    "PODCAST DURATION",
+                                    color = TxtSecond,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.5.sp
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    listOf("short" to "Short (<3m)", "default" to "Default (3-7m)", "long" to "Long (>7m)").forEach { (value, label) ->
+                                        FilterChip(
+                                            selected = selectedDuration == value,
+                                            onClick = { selectedDuration = value },
+                                            label = { Text(label, fontSize = 12.sp) },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = AccBlue.copy(alpha = 0.2f),
+                                                selectedLabelColor = AccBlue,
+                                                labelColor = TxtBody
+                                            )
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.height(16.dp))
+                            }
+
                             Button(
-                                onClick = { podcastViewModel.generatePodcast(articleId) },
+                                onClick = { podcastViewModel.generatePodcast(articleId, selectedDuration) },
                                 enabled = podcastState !is PodcastState.Generating,
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = AccBlue,
