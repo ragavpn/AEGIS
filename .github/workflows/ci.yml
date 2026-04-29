@@ -80,9 +80,7 @@ jobs:
     name: Android Release Build
     runs-on: ubuntu-latest
     # Run release build if secrets are configured
-    env:
-      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-    if: ${{ env.KEYSTORE_BASE64 != '' }}
+    if: ${{ secrets.KEYSTORE_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v4
       - name: Setup JDK 17
