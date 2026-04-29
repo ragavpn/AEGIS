@@ -1,0 +1,115 @@
+name: AEGIS CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  backend-test:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: './aegis-backend/package-lock.json'
+      - name: Install dependencies
+        working-directory: ./aegis-backend
+        run: npm ci
+      - name: Run backend tests
+        working-directory: ./aegis-backend
+        run: npm test
+
+  docker-build:
+    name: Docker Build Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Test Docker Compose Build
+        run: docker compose build
+
+  android-test:
+    name: Android Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+      - name: Grant execute permission for gradlew
+        working-directory: ./aegis-android
+        run: chmod +x gradlew
+      - name: Run Unit Tests
+        working-directory: ./aegis-android
+        run: ./gradlew testDebugUnitTest
+
+  android-debug-build:
+    name: Android Debug Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+      - name: Grant execute permission for gradlew
+        working-directory: ./aegis-android
+        run: chmod +x gradlew
+      - name: Build Debug APK
+        working-directory: ./aegis-android
+        run: ./gradlew assembleDebug
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: aegis-android/app/build/outputs/apk/debug/app-debug.apk
+
+  android-release-build:
+    name: Android Release Build
+    runs-on: ubuntu-latest
+    # Run release build if secrets are configured
+    env:
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+    if: ${{ env.KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+      - name: Grant execute permission for gradlew
+        working-directory: ./aegis-android
+        run: chmod +x gradlew
+      - name: Create Keystore
+        working-directory: ./aegis-android
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > upload-keystore.jks
+      - name: Create keystore.properties
+        working-directory: ./aegis-android
+        run: |
+          echo "storeFile=upload-keystore.jks" > keystore.properties
+          echo "storePassword=${{ secrets.SIGNING_STORE_PASSWORD }}" >> keystore.properties
+          echo "keyAlias=${{ secrets.SIGNING_KEY_ALIAS }}" >> keystore.properties
+          echo "keyPassword=${{ secrets.SIGNING_KEY_PASSWORD }}" >> keystore.properties
+      - name: Build Release APK
+        working-directory: ./aegis-android
+        run: ./gradlew assembleRelease
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: aegis-android/app/build/outputs/apk/release/app-release.apk
