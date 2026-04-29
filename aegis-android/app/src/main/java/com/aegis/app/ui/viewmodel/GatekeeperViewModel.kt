@@ -2,8 +2,8 @@ package com.aegis.app.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.aegis.app.data.repository.AppSettingsRepository
-import com.aegis.app.data.repository.UserDataRepository
+import com.aegis.app.data.repository.AppSettingsRepositoryInterface
+import com.aegis.app.data.repository.UserDataRepositoryInterface
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,8 +30,8 @@ sealed class GatekeeperDestination {
  */
 @HiltViewModel
 class GatekeeperViewModel @Inject constructor(
-    private val appSettingsRepo: AppSettingsRepository,
-    private val userDataRepo: UserDataRepository
+    private val appSettingsRepo: AppSettingsRepositoryInterface,
+    private val userDataRepo: UserDataRepositoryInterface
 ) : ViewModel() {
 
     private val _destination = MutableStateFlow<GatekeeperDestination>(GatekeeperDestination.Pending)

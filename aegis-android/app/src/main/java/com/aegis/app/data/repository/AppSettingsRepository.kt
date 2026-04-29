@@ -14,16 +14,16 @@ import javax.inject.Singleton
 @Singleton
 class AppSettingsRepository @Inject constructor(
     private val dao: AppSettingsDao
-) {
+) : AppSettingsRepositoryInterface {
     /** Reactive stream of the current settings. */
-    fun observe(): Flow<AppSettingsEntity?> = dao.observe()
+    override fun observe(): Flow<AppSettingsEntity?> = dao.observe()
 
-    suspend fun get(): AppSettingsEntity = dao.get() ?: AppSettingsEntity()
+    override suspend fun get(): AppSettingsEntity = dao.get() ?: AppSettingsEntity()
 
-    suspend fun setOnboardingComplete(complete: Boolean) {
+    override suspend fun setOnboardingComplete(complete: Boolean) {
         val current = dao.get() ?: AppSettingsEntity()
         dao.upsert(current.copy(onboardingComplete = complete))
     }
 
-    suspend fun isOnboardingComplete(): Boolean = get().onboardingComplete
+    override suspend fun isOnboardingComplete(): Boolean = get().onboardingComplete
 }

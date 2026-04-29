@@ -410,12 +410,12 @@
 
 ### Tasks
 
-- [ ] **10.1 — Interaction recording**
+- [x] **10.1 — Interaction recording**
   - `POST /interactions` accepts: `{ articleId, readDurationSeconds, scrollDepthPercent, liked, bookmarked }`
   - Upserts into `article_interactions` table (one row per user/article pair, updates if exists)
   - Acceptance: Interactions are saved correctly without duplicates
 
-- [ ] **10.2 — Scoring algorithm**
+- [x] **10.2 — Scoring algorithm**
   - Create `services/recommendationEngine.js`
   - `scoreArticle(userId, article, interactions)`:
     - Inputs: article object, user's last 20 interactions
@@ -564,6 +564,8 @@ Update this table as you work. It prevents context loss when resuming after a br
 | Date | Phase | Task | Files Changed | Notes |
 |---|---|---|---|---|
 | — | — | Example | `.gitignore`, `package.json` | Created initial structure |
+| 2026-04-26 | 10 | 10.1, 10.2 | `aegis-backend/routes/interactions.js`, `aegis-backend/db/queries/interactions.js`, `aegis-backend/services/recommendationEngine.js`, `__tests__/services/recommendationEngine.test.js` | Implemented and verified interaction tracking and recommendation engine with unit tests passing |
+| 2026-04-26 | 10 | Testing | `__tests__/routes/interactions.test.js`, `__tests__/routes/articles.test.js`, `ArticleInteractionViewModelTest.kt`, `UserDataRepositoryInterface.kt`, `UserDataRepository.kt`, `RepositoryModule.kt`, `UserDataViewModel.kt`, `GatekeeperViewModel.kt`, `build.gradle.kts` | Added integration tests for all Phase 10 backend routes (18/18 passing). Extracted `UserDataRepositoryInterface` so ViewModels can be unit tested with a fake repo (no live Supabase). ViewModel unit tests cover toggleLike, toggleLike double-flip, recordReadDuration accumulation, recordScrollDepth max-tracking, and toggleBookmark. |
 
 ---
 

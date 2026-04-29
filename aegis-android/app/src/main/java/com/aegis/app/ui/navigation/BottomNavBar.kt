@@ -11,7 +11,11 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.aegis.app.ui.viewmodel.NotificationListState
+import com.aegis.app.ui.viewmodel.NotificationViewModel
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -37,10 +41,18 @@ sealed class BottomNavItem(
 }
 
 @Composable
-fun BottomNavBar(navController: NavController) {
+fun BottomNavBar(
+    navController: NavController,
+    notificationViewModel: NotificationViewModel = hiltViewModel()
+) {
     val items = listOf(BottomNavItem.Feed, BottomNavItem.Chat, BottomNavItem.Notifications, BottomNavItem.Settings)
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val notificationState by notificationViewModel.listState.collectAsState()
+    
+    val unreadCount = if (notificationState is NotificationListState.Success) {
+        (notificationState as NotificationListState.Success).notifications.count { !it.isRead }
+    } else 0
 
     NavigationBar(containerColor = NavBg, tonalElevation = 0.dp) {
         items.forEach { item ->
@@ -58,10 +70,25 @@ fun BottomNavBar(navController: NavController) {
                     }
                 },
                 icon = {
-                    Icon(
-                        if (selected) item.selectedIcon else item.unselectedIcon,
-                        contentDescription = item.label
-                    )
+                    if (item == BottomNavItem.Notifications && unreadCount > 0) {
+                        BadgedBox(
+                            badge = {
+                                Badge(containerColor = AccBlue, contentColor = Color.White) { 
+                                    Text(unreadCount.toString()) 
+                                }
+                            }
+                        ) {
+                            Icon(
+                                if (selected) item.selectedIcon else item.unselectedIcon,
+                                contentDescription = item.label
+                            )
+                        }
+                    } else {
+                        Icon(
+                            if (selected) item.selectedIcon else item.unselectedIcon,
+                            contentDescription = item.label
+                        )
+                    }
                 },
                 label = {
                     Text(

@@ -4,6 +4,8 @@ build/
 .env
 .DS_Store
 *.log
+*.keystore
+keystore.properties
 aegis-android/.gradle/
 aegis-android/build/
 aegis-android/app/build/

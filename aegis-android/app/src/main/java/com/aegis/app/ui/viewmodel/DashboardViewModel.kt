@@ -3,7 +3,7 @@ package com.aegis.app.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.aegis.app.data.model.Article
-import com.aegis.app.data.repository.ArticleRepository
+import com.aegis.app.data.repository.ArticleRepositoryInterface
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,7 +26,7 @@ sealed class ArticleDetailState {
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
-    private val repository: ArticleRepository
+    private val repository: ArticleRepositoryInterface
 ) : ViewModel() {
 
     private val _listState = MutableStateFlow<ArticleListState>(ArticleListState.Loading)

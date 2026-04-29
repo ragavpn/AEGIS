@@ -12,17 +12,17 @@ import javax.inject.Singleton
 class ArticleRepository @Inject constructor(
     private val supabase: SupabaseClient,
     private val apiService: AegisApiService
-) {
-    suspend fun getArticles(): List<Article> {
+) : ArticleRepositoryInterface {
+    override suspend fun getArticles(): List<Article> {
         return apiService.getArticles()
     }
 
     /** Calls POST /articles/generate to kick off the backend article pipeline. */
-    suspend fun triggerGenerate() {
+    override suspend fun triggerGenerate() {
         apiService.triggerGenerateArticles()
     }
 
-    suspend fun getArticleById(id: String): Article {
+    override suspend fun getArticleById(id: String): Article {
         return supabase
             .from("articles")
             .select {

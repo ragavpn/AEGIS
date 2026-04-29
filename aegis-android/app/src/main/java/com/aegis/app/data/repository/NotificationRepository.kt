@@ -1,5 +1,6 @@
 package com.aegis.app.data.repository
 
+import com.aegis.app.data.api.AegisApiService
 import com.aegis.app.data.model.Notification
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
@@ -10,9 +11,11 @@ import javax.inject.Singleton
 
 @Singleton
 class NotificationRepository @Inject constructor(
-    private val supabase: SupabaseClient
-) {
-    suspend fun getNotifications(): List<Notification> {
+    private val supabase: SupabaseClient,
+    private val api: AegisApiService
+) : NotificationRepositoryInterface {
+
+    override suspend fun getNotifications(): List<Notification> {
         val user = supabase.auth.currentUserOrNull() ?: return emptyList()
         return supabase
             .from("notifications")
@@ -26,15 +29,7 @@ class NotificationRepository @Inject constructor(
             .decodeList<Notification>()
     }
 
-    suspend fun markAsRead(notificationId: String) {
-        supabase.from("notifications").update(
-            {
-                set("is_read", true)
-            }
-        ) {
-            filter {
-                eq("id", notificationId)
-            }
-        }
+    override suspend fun markAsRead(notificationId: String) {
+        api.markNotificationRead(notificationId)
     }
 }

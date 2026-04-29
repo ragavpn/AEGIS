@@ -3,7 +3,7 @@ package com.aegis.app.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.aegis.app.data.model.Notification
-import com.aegis.app.data.repository.NotificationRepository
+import com.aegis.app.data.repository.NotificationRepositoryInterface
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +19,7 @@ sealed class NotificationListState {
 
 @HiltViewModel
 class NotificationViewModel @Inject constructor(
-    private val repository: NotificationRepository
+    private val repository: NotificationRepositoryInterface
 ) : ViewModel() {
 
     private val _listState = MutableStateFlow<NotificationListState>(NotificationListState.Loading)

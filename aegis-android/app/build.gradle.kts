@@ -17,6 +17,14 @@ secrets {
     ignoreList.add("keyToIgnore") // Ignore anything if needed
 }
 
+// ── Load keystore credentials from a local, untracked file ────────────────────
+// Create aegis-android/keystore.properties (never commit this file).
+// See keystore.properties.template in the same directory for the expected format.
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) load(FileInputStream(keystorePropsFile))
+}
+
 android {
     namespace = "com.aegis.app"
     compileSdk {
@@ -35,6 +43,20 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // ── Signing ────────────────────────────────────────────────────────────────
+    signingConfigs {
+        create("release") {
+            // Only configure if keystore.properties exists (CI/CD or local release builds).
+            // Debug builds are unaffected.
+            if (keystorePropsFile.exists()) {
+                storeFile     = rootProject.file(keystoreProps["storeFile"].toString())
+                storePassword = keystoreProps["storePassword"].toString()
+                keyAlias      = keystoreProps["keyAlias"].toString()
+                keyPassword   = keystoreProps["keyPassword"].toString()
+            }
+        }
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -45,11 +67,16 @@ android {
             // Secrets are injected automatically by the secrets plugin
         }
         release {
-            isMinifyEnabled = true
+            isMinifyEnabled   = true
+            isShrinkResources = true        // removes unused res files on top of code shrinking
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Only apply signing config if keystore.properties is present
+            if (keystorePropsFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
     compileOptions {
@@ -70,6 +97,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.4")
     implementation("androidx.compose.material:material-icons-extended")
     testImplementation(libs.junit)
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -108,9 +136,9 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging-ktx")
 
     // Room (local DB — onboarding flag, caching)
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
+    implementation("androidx.room:room-runtime:2.7.2")
+    implementation("androidx.room:room-ktx:2.7.2")
+    ksp("androidx.room:room-compiler:2.7.2")
 
     // Security — EncryptedSharedPreferences
     implementation("androidx.security:security-crypto:1.1.0-alpha06")

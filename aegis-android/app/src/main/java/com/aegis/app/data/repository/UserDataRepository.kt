@@ -11,12 +11,12 @@ import javax.inject.Singleton
 @Singleton
 class UserDataRepository @Inject constructor(
     private val supabase: SupabaseClient
-) {
+) : UserDataRepositoryInterface {
     private val userId get() = supabase.auth.currentUserOrNull()?.id ?: error("Not logged in")
 
     // ── Article Interactions ─────────────────────────────────────────────────
 
-    suspend fun getInteraction(articleId: String): ArticleInteraction? {
+    override suspend fun getInteraction(articleId: String): ArticleInteraction? {
         return try {
             supabase.from("article_interactions")
                 .select {
@@ -29,7 +29,7 @@ class UserDataRepository @Inject constructor(
         } catch (e: Exception) { null }
     }
 
-    suspend fun upsertInteraction(interaction: ArticleInteraction) {
+    override suspend fun upsertInteraction(interaction: ArticleInteraction) {
         supabase.from("article_interactions")
             .upsert(interaction.copy(userId = userId)) {
                 onConflict = "user_id,article_id"
@@ -38,7 +38,7 @@ class UserDataRepository @Inject constructor(
 
     // ── User Preferences ──────────────────────────────────────────────────────
 
-    suspend fun getPreferences(): UserPreferences? {
+    override suspend fun getPreferences(): UserPreferences? {
         return try {
             supabase.from("user_preferences")
                 .select {
@@ -48,7 +48,7 @@ class UserDataRepository @Inject constructor(
         } catch (e: Exception) { null }
     }
 
-    suspend fun upsertPreferences(prefs: UserPreferences) {
+    override suspend fun upsertPreferences(prefs: UserPreferences) {
         supabase.from("user_preferences")
             .upsert(prefs.copy(userId = userId)) {
                 onConflict = "user_id"

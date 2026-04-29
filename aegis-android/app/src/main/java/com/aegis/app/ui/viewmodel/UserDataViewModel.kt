@@ -6,7 +6,7 @@ import com.aegis.app.data.model.ALL_MODULES
 import com.aegis.app.data.model.ArticleInteraction
 import com.aegis.app.data.model.UserPreferences
 import com.aegis.app.data.repository.AppSettingsRepository
-import com.aegis.app.data.repository.UserDataRepository
+import com.aegis.app.data.repository.UserDataRepositoryInterface
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,7 +17,7 @@ import javax.inject.Inject
 // ── Article Interaction ───────────────────────────────────────────────────────
 @HiltViewModel
 class ArticleInteractionViewModel @Inject constructor(
-    private val repo: UserDataRepository
+    private val repo: UserDataRepositoryInterface
 ) : ViewModel() {
 
     private val _interaction = MutableStateFlow<ArticleInteraction?>(null)
@@ -67,7 +67,7 @@ class ArticleInteractionViewModel @Inject constructor(
 // ── User Preferences ──────────────────────────────────────────────────────────
 @HiltViewModel
 class PreferencesViewModel @Inject constructor(
-    private val repo: UserDataRepository,
+    private val repo: UserDataRepositoryInterface,
     private val appSettingsRepo: AppSettingsRepository
 ) : ViewModel() {
 

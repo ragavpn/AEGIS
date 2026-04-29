@@ -3,7 +3,7 @@ package com.aegis.app.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.aegis.app.data.model.ChatMessage
-import com.aegis.app.data.repository.ChatRepository
+import com.aegis.app.data.repository.ChatRepositoryInterface
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +19,7 @@ data class ChatUiMessage(
 
 @HiltViewModel
 class ChatViewModel @Inject constructor(
-    private val repository: ChatRepository
+    private val repository: ChatRepositoryInterface
 ) : ViewModel() {
 
     private val _messages = MutableStateFlow<List<ChatUiMessage>>(emptyList())
@@ -27,6 +27,9 @@ class ChatViewModel @Inject constructor(
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error.asStateFlow()
 
     private var currentConversationId: String? = null
 
@@ -37,8 +40,6 @@ class ChatViewModel @Inject constructor(
     private fun initializeConversation() {
         viewModelScope.launch {
             try {
-                // For simplicity, create a new conversation per session.
-                // In a full implementation, you'd load existing ones.
                 val conv = repository.createConversation()
                 currentConversationId = conv.id
             } catch (e: Exception) {
@@ -50,11 +51,9 @@ class ChatViewModel @Inject constructor(
     fun sendMessage(content: String) {
         if (content.isBlank() || _isLoading.value) return
 
-        // Add user message
         val userMsg = ChatUiMessage(role = "user", content = content.trim())
         _messages.value = _messages.value + userMsg
 
-        // Add loading placeholder
         val loadingMsg = ChatUiMessage(role = "assistant", content = "...", isLoading = true)
         _messages.value = _messages.value + loadingMsg
         _isLoading.value = true
@@ -70,14 +69,13 @@ class ChatViewModel @Inject constructor(
 
                 val response = repository.sendMessage(convId, content)
 
-                // Replace loading placeholder with real response
                 _messages.value = _messages.value.dropLast(1) +
                     ChatUiMessage(role = "assistant", content = response.content)
             } catch (e: Exception) {
                 _messages.value = _messages.value.dropLast(1) +
                     ChatUiMessage(
                         role = "error",
-                        content = "Failed to get response: ${e.message}"
+                        content = "Failed to get response. Check your connection."
                     )
             } finally {
                 _isLoading.value = false
@@ -85,7 +83,19 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    fun clearChat() {
-        _messages.value = emptyList()
+    /** Wipes the local UI list AND deletes all conversations on the backend. */
+    fun clearHistory() {
+        viewModelScope.launch {
+            try {
+                repository.clearHistory()
+                _messages.value = emptyList()
+                currentConversationId = null
+                initializeConversation()
+            } catch (e: Exception) {
+                _error.value = "Failed to clear history: ${e.message}"
+            }
+        }
     }
+
+    fun clearError() { _error.value = null }
 }

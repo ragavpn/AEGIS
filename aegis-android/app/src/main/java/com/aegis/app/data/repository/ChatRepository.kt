@@ -10,20 +10,24 @@ import javax.inject.Singleton
 @Singleton
 class ChatRepository @Inject constructor(
     private val api: AegisApiService
-) {
-    suspend fun createConversation(title: String = "New Conversation"): com.aegis.app.data.model.Conversation {
+) : ChatRepositoryInterface {
+    override suspend fun createConversation(title: String): com.aegis.app.data.model.Conversation {
         return api.createConversation(mapOf("title" to title))
     }
 
-    suspend fun getConversationHistory(conversationId: String): List<ChatMessage> {
+    override suspend fun getConversationHistory(conversationId: String): List<ChatMessage> {
         return api.getConversationHistory(conversationId).messages
     }
 
-    suspend fun sendMessage(conversationId: String, content: String): ChatResponse {
+    override suspend fun sendMessage(conversationId: String, content: String): ChatResponse {
         return api.sendMessage(conversationId, com.aegis.app.data.model.MessageRequest(content))
     }
 
-    suspend fun registerDeviceToken(userId: String, token: String) {
+    override suspend fun registerDeviceToken(userId: String, token: String) {
         api.registerToken(mapOf("userId" to userId, "token" to token))
+    }
+
+    override suspend fun clearHistory() {
+        api.deleteAllConversations()
     }
 }
