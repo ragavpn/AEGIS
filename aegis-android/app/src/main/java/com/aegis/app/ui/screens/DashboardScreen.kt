@@ -29,10 +29,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.content.Intent
+import android.net.Uri
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.platform.LocalContext
 import com.aegis.app.data.model.Article
 import com.aegis.app.ui.viewmodel.ArticleListState
 import com.aegis.app.ui.viewmodel.DashboardViewModel
+import com.aegis.app.ui.viewmodel.PodcastState
+import com.aegis.app.ui.viewmodel.PodcastViewModel
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -76,9 +81,12 @@ private fun formatDate(iso: String?): String {
 fun DashboardScreen(
     onArticleClick: (String) -> Unit = {},
     onDailyBriefingClick: () -> Unit = {},
-    viewModel: DashboardViewModel = hiltViewModel()
+    viewModel: DashboardViewModel = hiltViewModel(),
+    podcastViewModel: PodcastViewModel = hiltViewModel()
 ) {
     val state by viewModel.listState.collectAsState()
+    val digestState by podcastViewModel.digestState.collectAsState()
+    val context = LocalContext.current
     var isRefreshing by remember { mutableStateOf(false) }
 
     // Sync isRefreshing with VM state so the PTR indicator dismisses correctly
@@ -167,6 +175,19 @@ fun DashboardScreen(
                             contentPadding = PaddingValues(vertical = 12.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
+                            // ── Daily Digest Podcast Banner ───────────────────────
+                            item(key = "daily_digest_banner") {
+                                DailyDigestBanner(
+                                    state = digestState,
+                                    onGenerate = { scale -> podcastViewModel.generateDailyDigest(scale) },
+                                    onPlay = { url ->
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                        context.startActivity(intent)
+                                    }
+                                )
+                                Spacer(Modifier.height(16.dp))
+                            }
+
                             // ── "Curated For You" horizontal row ─────────────────
                             item(key = "curated_header") {
                                 Text(
@@ -210,6 +231,151 @@ fun DashboardScreen(
                                     modifier = Modifier.padding(horizontal = 16.dp)
                                 )
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── Daily Digest Podcast Banner ───────────────────────────────────────────────
+@Composable
+fun DailyDigestBanner(
+    state: PodcastState,
+    onGenerate: (String) -> Unit,
+    onPlay: (String) -> Unit
+) {
+    val gradient = Brush.horizontalGradient(
+        colors = listOf(Color(0xFF1A1040), Color(0xFF0D1B3E))
+    )
+    val durations = listOf("short" to "Short", "default" to "Default", "long" to "Long")
+    var selectedScale by remember { mutableStateOf("default") }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(gradient)
+                .padding(20.dp)
+        ) {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("🎙", fontSize = 22.sp)
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            "AEGIS DAILY BRIEF",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 13.sp,
+                            letterSpacing = 2.sp,
+                            color = Color(0xFFF59E0B)
+                        )
+                        Text(
+                            "Last 24 hours • Intelligence Digest",
+                            fontSize = 11.sp,
+                            color = Color(0xFF94A3B8)
+                        )
+                    }
+                }
+
+                // Duration selector chips — only show when Idle or Error
+                if (state is PodcastState.Idle || state is PodcastState.Error) {
+                    Spacer(Modifier.height(14.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        durations.forEach { (value, label) ->
+                            val isSelected = selectedScale == value
+                            Surface(
+                                shape = RoundedCornerShape(20.dp),
+                                color = if (isSelected) Color(0xFFF59E0B) else Color(0xFF1E2D45),
+                                modifier = Modifier
+                                    .clickable { selectedScale = value }
+                                    .weight(1f)
+                            ) {
+                                Text(
+                                    label,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) Color(0xFF0A0E1A) else Color(0xFF94A3B8),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                when (state) {
+                    is PodcastState.Idle -> {
+                        Button(
+                            onClick = { onGenerate(selectedScale) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFF59E0B),
+                                contentColor = Color(0xFF0A0E1A)
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Generate Daily Digest", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
+                    }
+                    is PodcastState.Generating -> {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = Color(0xFFF59E0B),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                "Generating your briefing…",
+                                color = Color(0xFF94A3B8),
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+                    is PodcastState.Ready -> {
+                        Button(
+                            onClick = { onPlay(state.audioUrl) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF10B981),
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Play Daily Brief", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
+                    }
+                    is PodcastState.Error -> {
+                        Text(
+                            "⚠ ${state.message}",
+                            color = Color(0xFFEF4444),
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                        TextButton(onClick = { onGenerate(selectedScale) }) {
+                            Text("Retry", color = Color(0xFFF59E0B))
                         }
                     }
                 }

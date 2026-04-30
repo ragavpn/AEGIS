@@ -22,8 +22,13 @@ class PodcastViewModel @Inject constructor(
     private val apiService: AegisApiService
 ) : ViewModel() {
 
+    // State for per-article podcast
     private val _state = MutableStateFlow<PodcastState>(PodcastState.Idle)
     val state: StateFlow<PodcastState> = _state.asStateFlow()
+
+    // State for daily digest podcast
+    private val _digestState = MutableStateFlow<PodcastState>(PodcastState.Idle)
+    val digestState: StateFlow<PodcastState> = _digestState.asStateFlow()
 
     fun generatePodcast(articleId: String, durationScale: String = "default") {
         if (_state.value is PodcastState.Generating || _state.value is PodcastState.Ready) return
@@ -42,5 +47,28 @@ class PodcastViewModel @Inject constructor(
                 _state.value = PodcastState.Error(e.message ?: "Unknown error")
             }
         }
+    }
+
+    fun generateDailyDigest(durationScale: String = "default") {
+        if (_digestState.value is PodcastState.Generating) return
+
+        viewModelScope.launch {
+            _digestState.value = PodcastState.Generating
+            try {
+                val response = apiService.generateDailyDigestPodcast(mapOf("duration_scale" to durationScale))
+                val audioUrl = response["audio_url"]
+                if (audioUrl != null) {
+                    _digestState.value = PodcastState.Ready(audioUrl)
+                } else {
+                    _digestState.value = PodcastState.Error("Failed to get daily digest audio URL")
+                }
+            } catch (e: Exception) {
+                _digestState.value = PodcastState.Error(e.message ?: "Unknown error")
+            }
+        }
+    }
+
+    fun resetDigestState() {
+        _digestState.value = PodcastState.Idle
     }
 }

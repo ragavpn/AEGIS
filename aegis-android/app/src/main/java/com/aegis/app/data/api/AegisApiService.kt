@@ -32,6 +32,9 @@ interface AegisApiService {
     @POST("podcasts/generate")
     suspend fun generatePodcast(@Body body: Map<String, String>): Map<String, String>
 
+    @POST("podcasts/generate-daily")
+    suspend fun generateDailyDigestPodcast(@Body body: Map<String, String>): Map<String, String>
+
     @retrofit2.http.GET("articles")
     suspend fun getArticles(): List<com.aegis.app.data.model.Article>
 
