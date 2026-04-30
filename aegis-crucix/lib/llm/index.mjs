@@ -36,6 +36,13 @@ export function createLLMProvider(llmConfig) {
       return new AnthropicProvider({ apiKey, model });
     case "openai":
       return new OpenAIProvider({ apiKey, model, baseUrl: llmConfig.baseUrl });
+    case "github":
+      // GitHub Models — uses OpenAI-compatible API with automatic rate-limit fallback
+      return new OpenAIProvider({
+        apiKey,
+        model: model || 'gpt-4o',
+        baseUrl: 'https://models.inference.ai.azure.com/chat/completions',
+      });
     case "openrouter":
       return new OpenRouterProvider({ apiKey, model });
     case "gemini":

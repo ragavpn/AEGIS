@@ -6,11 +6,19 @@ export default {
   port: parseInt(process.env.PORT) || 3117,
   refreshIntervalMinutes: parseInt(process.env.REFRESH_INTERVAL_MINUTES) || 15,
 
+  // LLM config — mirrors aegis-backend's approach:
+  // Just set LLM_API_KEY + (optionally) LLM_BASE_URL and LLM_MODEL.
+  // LLM_PROVIDER is optional — defaults to 'openai' (OpenAI-compatible) when LLM_API_KEY is present.
+  // Set LLM_PROVIDER explicitly only for non-OpenAI-compatible providers (anthropic, gemini, codex, etc.)
   llm: {
-    provider: process.env.LLM_PROVIDER || null, // anthropic | openai | gemini | codex | openrouter | minimax | mistral | ollama | grok
+    provider: process.env.LLM_PROVIDER
+      || (process.env.LLM_API_KEY ? 'openai' : null), // auto-detect: API key present → OpenAI-compatible
     apiKey: process.env.LLM_API_KEY || null,
-    model: process.env.LLM_MODEL || null,
-    baseUrl: process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || null,
+    model: process.env.LLM_MODEL || 'gpt-4o',
+    // Defaults to GitHub Models if no base URL is set — same as aegis-backend
+    baseUrl: process.env.LLM_BASE_URL
+      || process.env.OLLAMA_BASE_URL
+      || 'https://models.inference.ai.azure.com/chat/completions',
   },
 
   telegram: {
