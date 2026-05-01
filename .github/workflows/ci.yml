@@ -146,6 +146,10 @@ jobs:
 
           echo "Creating Crucix service..."
 
+          echo "Linking Crucix service context..."
+
+          railway service --service aegis-crucix
+
           echo "Deploying Crucix service (Railway will create if missing)..."
 
           railway variables set \
@@ -163,6 +167,10 @@ jobs:
             --image ghcr.io/${{ env.REPO_LC }}/aegis-crucix:sha-${{ github.sha }}
 
           echo "Creating Backend service..."
+
+          echo "Linking Backend service context..."
+
+          railway service --service aegis-backend
 
           echo "Deploying Backend service (Railway will create if missing)..."
 
