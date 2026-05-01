@@ -111,12 +111,40 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
-          # Project token supports: railway up, railway redeploy, railway logs ONLY
-          # Deploy aegis-crucix from its subdirectory
+          # Deploy aegis-crucix (creates service if needed, builds Dockerfile)
           railway up --service aegis-crucix --ci ./aegis-crucix
 
-          # Deploy aegis-backend from its subdirectory
+          # Set environment variables for aegis-crucix (triggers auto-redeploy)
+          railway variable set --service aegis-crucix \
+            AEGIS_SECRET="${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}" \
+            LLM_API_KEY="${{ secrets.CRUCIX_LLM_API_KEY }}" \
+            LLM_BASE_URL="https://models.inference.ai.azure.com/chat/completions" \
+            LLM_MODEL="gpt-4o" \
+            PORT="3117" \
+            REFRESH_INTERVAL_MINUTES="15"
+
+          # Deploy aegis-backend (creates service if needed, builds Dockerfile)
           railway up --service aegis-backend --ci ./aegis-backend
+
+          # Set environment variables for aegis-backend (triggers auto-redeploy)
+          railway variable set --service aegis-backend \
+            CRUCIX_BASE_URL="http://aegis-crucix.railway.internal:3117" \
+            CRUCIX_SECRET="${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}" \
+            ELEVENLABS_API_KEY="${{ secrets.ELEVENLABS_API_KEY }}" \
+            ELEVENLABS_VOICE_ID="JBFqnCBsd6RMkjVDRZzb" \
+            FIREBASE_SERVICE_ACCOUNT="${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" \
+            HF_TOKEN="${{ secrets.HF_TOKEN }}" \
+            HUGGINGFACE_VOICE_ID="af_heart" \
+            LLM_API_KEY="${{ secrets.BACKEND_LLM_API_KEY }}" \
+            LLM_BASE_URL="https://models.inference.ai.azure.com/chat/completions" \
+            LLM_MODEL="gpt-4o-mini" \
+            NEO4J_PASSWORD="${{ secrets.NEO4J_PASSWORD }}" \
+            NEO4J_URI="neo4j+s://07c6da35.databases.neo4j.io" \
+            NEO4J_USERNAME="neo4j" \
+            NODE_ENV="production" \
+            SUPABASE_SERVICE_KEY="${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
+            TTS_SERVICE="huggingface"
 
       - name: Wait for services to be ready
         run: sleep 45
