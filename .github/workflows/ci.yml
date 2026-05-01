@@ -111,10 +111,13 @@ jobs:
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
-
         run: |
+          # Link explicitly to bypass interactive prompts and set the environment context
+          railway link -p "$RAILWAY_PROJECT_ID" -e production
+
           REPO="ghcr.io/${{ github.repository_owner }}/aegis"
           SHA_TAG="sha-${{ github.sha }}"
+
 
           # aegis-crucix: create/update service from GHCR image
           railway add \
