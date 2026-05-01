@@ -180,7 +180,7 @@ jobs:
   sign-android:
     name: Sign & Release Android APK
     needs: validate
-    if: github.ref == 'refs/heads/main' && vars.DEPLOY == 'true' && secrets.ANDROID_KEYSTORE_BASE64 != ''
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
