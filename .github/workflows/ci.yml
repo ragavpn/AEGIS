@@ -111,22 +111,12 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
-          if [ -z "${{ vars.RAILWAY_PROJECT_ID }}" ]; then
-            echo "No RAILWAY_PROJECT_ID found. Creating new project..."
-            railway init --name aegis
-            PROJECT_ID=$(railway project)
-            echo "RAILWAY_PROJECT_ID: $PROJECT_ID" >> $GITHUB_STEP_SUMMARY
-            echo "Please set this as a repository variable vars.RAILWAY_PROJECT_ID for future deployments."
-            railway link -p $PROJECT_ID
-          else
-            railway link -p "${{ vars.RAILWAY_PROJECT_ID }}"
-          fi
-
+          # Project token is already scoped to the project - no link needed
           # Ensure services exist (fails safely if they already exist)
           railway add --service aegis-backend || true
           railway add --service aegis-crucix || true
 
-          # Wait briefly for link/creation to settle
+          # Wait briefly for services to register
           sleep 5
 
           # Set vars for aegis-crucix
@@ -138,8 +128,8 @@ jobs:
             PORT="3117" \
             REFRESH_INTERVAL_MINUTES="15"
 
-          # Deploy aegis-crucix directly from subdirectory
-          railway up aegis-crucix --service aegis-crucix --detach
+          # Deploy aegis-crucix from its subdirectory
+          railway up --service aegis-crucix --detach aegis-crucix
 
           # Set vars for aegis-backend
           railway variable set --service aegis-backend \
@@ -161,8 +151,8 @@ jobs:
             SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
             TTS_SERVICE="huggingface"
 
-          # Deploy aegis-backend directly from subdirectory
-          railway up aegis-backend --service aegis-backend --detach
+          # Deploy aegis-backend from its subdirectory
+          railway up --service aegis-backend --detach aegis-backend
 
       - name: Wait for services to be ready
         run: sleep 45
