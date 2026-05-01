@@ -67,6 +67,7 @@ jobs:
     needs: validate
     if: github.ref == 'refs/heads/main' && vars.DEPLOY == 'true'
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -83,14 +84,17 @@ jobs:
           password: ${{ secrets.GHCR_TOKEN }}
 
       - name: Set lower case repository name
-        run: echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
+        run: |
+          echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
 
       - name: Build and push aegis-backend image
         uses: docker/build-push-action@v5
         with:
           context: ./aegis-backend
           push: true
-          tags: ghcr.io/${{ env.REPO_LC }}/aegis-backend:sha-${{ github.sha }},ghcr.io/${{ env.REPO_LC }}/aegis-backend:latest
+          tags: |
+            ghcr.io/${{ env.REPO_LC }}/aegis-backend:sha-${{ github.sha }}
+            ghcr.io/${{ env.REPO_LC }}/aegis-backend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -99,209 +103,107 @@ jobs:
         with:
           context: ./aegis-crucix
           push: true
-          tags: ghcr.io/${{ env.REPO_LC }}/aegis-crucix:sha-${{ github.sha }},ghcr.io/${{ env.REPO_LC }}/aegis-crucix:latest
+          tags: |
+            ghcr.io/${{ env.REPO_LC }}/aegis-crucix:sha-${{ github.sha }}
+            ghcr.io/${{ env.REPO_LC }}/aegis-crucix:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Install Railway CLI
-        run: npm i -g @railway/cli
+        run: npm install -g @railway/cli
 
-      # -----------------------------------------------------------------------
-      # Resolve the production environment UUID and store it in GITHUB_ENV so
-      # every subsequent step can use it as RAILWAY_ENVIRONMENT_ID.
-      # The Railway CLI requires the UUID (not the name) via this env var.
-      # -----------------------------------------------------------------------
-      - name: Resolve Railway environment ID
-        id: railway_env
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Deploy to Railway (clean recreate services)
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
         run: |
           set -e
-          PROJECT_ID="${{ vars.RAILWAY_PROJECT_ID }}"
 
-          RESP=$(curl -sf -X POST https://backboard.railway.com/graphql/v2 \
-            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"query\":\"{ project(id: \\\"$PROJECT_ID\\\") { environments { edges { node { id name } } } } }\"}")
+          echo "Linking to Railway project..."
 
-          echo "Environments: $RESP"
+          railway link --project $PROJECT_ID
 
-          ENV_ID=$(echo "$RESP" | \
-            jq -r '.data.project.environments.edges[] | select(.node.name=="production") | .node.id')
+          echo "Deleting existing services (required for free plan)..."
 
-          if [ -z "$ENV_ID" ]; then
-            echo "ERROR: Could not find production environment in project $PROJECT_ID"
-            exit 1
+          services=$(railway service list --json | jq -r '.[].name')
+
+          if [ -n "$services" ]; then
+            for service in $services; do
+              echo "Deleting service: $service"
+              railway service delete "$service" --yes
+            done
+          else
+            echo "No existing services found"
           fi
 
-          echo "Production environment ID: $ENV_ID"
-          echo "RAILWAY_ENVIRONMENT_ID=$ENV_ID" >> "$GITHUB_ENV"
+          echo "Creating Crucix service..."
 
-      - name: Delete existing Railway services
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-        run: |
-          set -e
-          PROJECT_ID="${{ vars.RAILWAY_PROJECT_ID }}"
+          railway service create aegis-crucix
+          railway service connect aegis-crucix
 
-          echo ">>> Fetching current services..."
-          SERVICES=$(curl -sf -X POST https://backboard.railway.com/graphql/v2 \
-            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"query\":\"{ project(id: \\\"$PROJECT_ID\\\") { services { edges { node { id name } } } } }\"}")
+          railway variables set \
+            PORT=3117 \
+            REFRESH_INTERVAL_MINUTES=15 \
+            AEGIS_SECRET=${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }} \
+            LLM_API_KEY=${{ secrets.CRUCIX_LLM_API_KEY }} \
+            LLM_BASE_URL=https://models.inference.ai.azure.com/chat/completions \
+            LLM_MODEL=gpt-4o \
+            RAILWAY_REGISTRY_AUTH_USERNAME=${{ github.actor }} \
+            RAILWAY_REGISTRY_AUTH_PASSWORD=${{ secrets.GHCR_TOKEN }}
 
-          echo "Response: $SERVICES"
+          railway up \
+            --service aegis-crucix \
+            --image ghcr.io/${{ env.REPO_LC }}/aegis-crucix:sha-${{ github.sha }}
 
-          echo "$SERVICES" | jq -r '.data.project.services.edges[].node | "\(.id)|\(.name)"' | \
-          while IFS='|' read -r SVC_ID SVC_NAME; do
-            echo ">>> Deleting service: $SVC_NAME (id=$SVC_ID)"
-            curl -sf -X POST https://backboard.railway.com/graphql/v2 \
-              -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-              -H "Content-Type: application/json" \
-              -d "{\"query\":\"mutation { serviceDelete(id: \\\"$SVC_ID\\\") }\"}"
-            echo "Deleted $SVC_NAME"
-          done
+          echo "Creating Backend service..."
 
-          echo ">>> Waiting for deletions to settle..."
-          sleep 8
+          railway service create aegis-backend
+          railway service connect aegis-backend
 
-      # RAILWAY_ENVIRONMENT_ID is now set in the environment from the resolve
-      # step above. The CLI picks it up automatically — no flag needed.
-      - name: Create aegis-crucix service
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
-        run: |
-          set -e
-          REPO="ghcr.io/${{ github.repository_owner }}/aegis"
-          SHA_TAG="sha-${{ github.sha }}"
+          railway variables set \
+            NODE_ENV=production \
+            CRUCIX_BASE_URL=http://aegis-crucix.railway.internal:3117 \
+            CRUCIX_SECRET=${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }} \
+            ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }} \
+            ELEVENLABS_VOICE_ID=JBFqnCBsd6RMkjVDRZzb \
+            FIREBASE_SERVICE_ACCOUNT=${{ secrets.FIREBASE_SERVICE_ACCOUNT }} \
+            HF_TOKEN=${{ secrets.HF_TOKEN }} \
+            HUGGINGFACE_VOICE_ID=af_heart \
+            LLM_API_KEY=${{ secrets.BACKEND_LLM_API_KEY }} \
+            LLM_BASE_URL=https://models.inference.ai.azure.com/chat/completions \
+            LLM_MODEL=gpt-4o-mini \
+            NEO4J_PASSWORD=${{ secrets.NEO4J_PASSWORD }} \
+            NEO4J_URI=neo4j+s://07c6da35.databases.neo4j.io \
+            NEO4J_USERNAME=neo4j \
+            SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }} \
+            SUPABASE_URL=${{ secrets.SUPABASE_URL }}
 
-          echo ">>> Creating aegis-crucix from $REPO/aegis-crucix:$SHA_TAG"
-          railway add \
-            --image "$REPO/aegis-crucix:$SHA_TAG" \
-            --service aegis-crucix
-
-      - name: Set aegis-crucix variables
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
-        run: |
-          set -e
-          railway variable set \
-            "AEGIS_SECRET=${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}" \
-            "LLM_API_KEY=${{ secrets.CRUCIX_LLM_API_KEY }}" \
-            "LLM_BASE_URL=https://models.inference.ai.azure.com/chat/completions" \
-            "LLM_MODEL=gpt-4o" \
-            "PORT=3117" \
-            "REFRESH_INTERVAL_MINUTES=15" \
-            --service aegis-crucix
-
-      - name: Create aegis-backend service
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
-        run: |
-          set -e
-          REPO="ghcr.io/${{ github.repository_owner }}/aegis"
-          SHA_TAG="sha-${{ github.sha }}"
-
-          echo ">>> Creating aegis-backend from $REPO/aegis-backend:$SHA_TAG"
-          railway add \
-            --image "$REPO/aegis-backend:$SHA_TAG" \
-            --service aegis-backend
-
-      - name: Set aegis-backend variables
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        run: |
-          set -e
-
-          railway variable set \
-            "CRUCIX_BASE_URL=http://aegis-crucix.railway.internal:3117" \
-            "CRUCIX_SECRET=${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}" \
-            "ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}" \
-            "ELEVENLABS_VOICE_ID=JBFqnCBsd6RMkjVDRZzb" \
-            "HF_TOKEN=${{ secrets.HF_TOKEN }}" \
-            "HUGGINGFACE_VOICE_ID=af_heart" \
-            "LLM_API_KEY=${{ secrets.BACKEND_LLM_API_KEY }}" \
-            "LLM_BASE_URL=https://models.inference.ai.azure.com/chat/completions" \
-            "LLM_MODEL=gpt-4o-mini" \
-            "NEO4J_PASSWORD=${{ secrets.NEO4J_PASSWORD }}" \
-            "NEO4J_URI=neo4j+s://07c6da35.databases.neo4j.io" \
-            "NEO4J_USERNAME=neo4j" \
-            "NODE_ENV=production" \
-            "SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}" \
-            "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" \
-            "TTS_SERVICE=huggingface" \
+          railway up \
             --service aegis-backend \
-            --skip-deploys
+            --image ghcr.io/${{ env.REPO_LC }}/aegis-backend:sha-${{ github.sha }}
 
-          # FIREBASE_SERVICE_ACCOUNT is a JSON blob — pipe via stdin to avoid
-          # shell quoting issues. This final set (without --skip-deploys)
-          # triggers the one real redeploy with all vars present.
-          echo "$FIREBASE_SERVICE_ACCOUNT" | \
-            railway variable set FIREBASE_SERVICE_ACCOUNT \
-              --stdin \
-              --service aegis-backend
-
-      - name: Generate public domain for aegis-backend
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
-        run: |
-          set -e
-          echo ">>> Generating Railway domain for aegis-backend..."
-          railway domain --service aegis-backend
+          echo "Deployment complete"
 
       - name: Wait for services to be ready
         run: sleep 60
 
-      - name: Get backend public URL from Railway API
-        id: get_backend_url
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-        run: |
-          PROJECT_ID="${{ vars.RAILWAY_PROJECT_ID }}"
-
-          DOMAIN_RESP=$(curl -sf -X POST https://backboard.railway.com/graphql/v2 \
-            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"query\":\"{ project(id: \\\"$PROJECT_ID\\\") { services { edges { node { name domains { edges { node { domain } } } } } } } }\"}")
-
-          echo "Domain response: $DOMAIN_RESP"
-
-          BACKEND_URL=$(echo "$DOMAIN_RESP" | \
-            jq -r '.data.project.services.edges[] | select(.node.name=="aegis-backend") | .node.domains.edges[0].node.domain // empty')
-
-          if [ -z "$BACKEND_URL" ]; then
-            echo "WARNING: Could not retrieve backend domain yet. Health check skipped."
-            echo "backend_url=" >> "$GITHUB_OUTPUT"
-          else
-            echo "Backend URL: https://$BACKEND_URL"
-            echo "backend_url=https://$BACKEND_URL" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Health check (Backend)
-        if: steps.get_backend_url.outputs.backend_url != ''
-        run: |
-          URL="${{ steps.get_backend_url.outputs.backend_url }}"
-          echo ">>> Health checking $URL/health"
-          curl --fail --retry 5 --retry-delay 10 "$URL/health"
+        if: vars.BACKEND_PUBLIC_URL != ''
+        run: curl --fail ${{ vars.BACKEND_PUBLIC_URL }}/health
 
       - name: Health check (Crucix via Backend proxy)
-        if: steps.get_backend_url.outputs.backend_url != ''
-        run: |
-          URL="${{ steps.get_backend_url.outputs.backend_url }}"
-          echo ">>> Health checking $URL/crucix/health"
-          curl --fail --retry 5 --retry-delay 10 "$URL/crucix/health"
+        if: vars.BACKEND_PUBLIC_URL != ''
+        run: curl --fail ${{ vars.BACKEND_PUBLIC_URL }}/crucix/health
 
   sign-android:
     name: Sign & Release Android APK
     needs: validate
     if: github.ref == 'refs/heads/main' && vars.DEPLOY == 'true'
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -356,6 +258,7 @@ jobs:
     needs: deploy
     if: github.ref == 'refs/heads/main' && vars.DEPLOY == 'true' && vars.SUPABASE_PROJECT_ID != ''
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
         with:
