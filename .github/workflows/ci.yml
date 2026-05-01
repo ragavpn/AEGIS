@@ -62,8 +62,6 @@ jobs:
         working-directory: ./aegis-backend
         run: npm test --if-present
 
-
-
   deploy:
     name: Deploy to Railway & GHCR
     needs: validate
@@ -84,12 +82,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_TOKEN }}
 
+      - name: Set lower case repository name
+        run: |
+          echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
+
       - name: Build and push aegis-backend image
         uses: docker/build-push-action@v5
         with:
           context: ./aegis-backend
           push: true
-          tags: ghcr.io/${{ github.repository }}/aegis-backend:sha-${{ github.sha }},ghcr.io/${{ github.repository }}/aegis-backend:latest
+          tags: ghcr.io/${{ env.REPO_LC }}/aegis-backend:sha-${{ github.sha }},ghcr.io/${{ env.REPO_LC }}/aegis-backend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -98,7 +100,7 @@ jobs:
         with:
           context: ./aegis-crucix
           push: true
-          tags: ghcr.io/${{ github.repository }}/aegis-crucix:sha-${{ github.sha }},ghcr.io/${{ github.repository }}/aegis-crucix:latest
+          tags: ghcr.io/${{ env.REPO_LC }}/aegis-crucix:sha-${{ github.sha }},ghcr.io/${{ env.REPO_LC }}/aegis-crucix:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
