@@ -121,7 +121,7 @@ jobs:
             railway service create --name aegis-backend
             railway service create --name aegis-crucix
           else
-            railway link ${{ vars.RAILWAY_PROJECT_ID }}
+            railway link -p ${{ vars.RAILWAY_PROJECT_ID }}
           fi
 
           # Wait briefly for link/creation to settle
