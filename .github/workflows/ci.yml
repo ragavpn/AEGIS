@@ -166,8 +166,7 @@ jobs:
           echo ">>> Creating aegis-crucix from image $REPO/aegis-crucix:$SHA_TAG"
           railway add \
             --image "$REPO/aegis-crucix:$SHA_TAG" \
-            --service aegis-crucix \
-            -y
+            --service aegis-crucix
 
       - name: Set aegis-crucix variables
         env:
@@ -199,8 +198,7 @@ jobs:
           echo ">>> Creating aegis-backend from image $REPO/aegis-backend:$SHA_TAG"
           railway add \
             --image "$REPO/aegis-backend:$SHA_TAG" \
-            --service aegis-backend \
-            -y
+            --service aegis-backend
 
       - name: Set aegis-backend variables
         env:
