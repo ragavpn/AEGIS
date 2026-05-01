@@ -104,34 +104,15 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Install Railway CLI
-        run: npm i -g @railway/cli
-
       - name: Deploy to Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
-          # Link project - project token authenticates, project ID sets context
-          railway link -p "${{ vars.RAILWAY_PROJECT_ID }}"
+          # NOTE: Services must be pre-created manually in Railway dashboard
+          # pointing at ghcr.io/$REPO/aegis-crucix:latest and ghcr.io/$REPO/aegis-backend:latest
+          # This step only updates env vars and triggers a redeploy.
 
-          # Delete stale services before recreating (free plan has service limits)
-          railway service delete --service aegis-backend --yes || true
-          railway service delete --service aegis-crucix --yes || true
-
-          sleep 3
-
-          # Recreate services from Docker images already pushed to GHCR
-          railway add \
-            --service aegis-crucix \
-            --image ghcr.io/${{ env.REPO_LC }}/aegis-crucix:latest
-
-          railway add \
-            --service aegis-backend \
-            --image ghcr.io/${{ env.REPO_LC }}/aegis-backend:latest
-
-          sleep 5
-
-          # Set vars for aegis-crucix
+          # Set vars for aegis-crucix (triggers redeploy automatically)
           railway variable set --service aegis-crucix \
             AEGIS_SECRET="${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}" \
             LLM_API_KEY="${{ secrets.CRUCIX_LLM_API_KEY }}" \
@@ -140,7 +121,7 @@ jobs:
             PORT="3117" \
             REFRESH_INTERVAL_MINUTES="15"
 
-          # Set vars for aegis-backend
+          # Set vars for aegis-backend (triggers redeploy automatically)
           railway variable set --service aegis-backend \
             CRUCIX_BASE_URL="http://aegis-crucix.railway.internal:3117" \
             CRUCIX_SECRET="${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}" \
@@ -159,6 +140,10 @@ jobs:
             SUPABASE_SERVICE_KEY="${{ secrets.SUPABASE_SERVICE_KEY }}" \
             SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
             TTS_SERVICE="huggingface"
+
+          # Force redeploy to pull the latest image from GHCR
+          railway service redeploy --service aegis-crucix --yes || true
+          railway service redeploy --service aegis-backend --yes || true
 
       - name: Wait for services to be ready
         run: sleep 45
