@@ -45,28 +45,28 @@ jobs:
         working-directory: ./aegis-crucix
         run: npm ci || npm install
 
-      # - name: Run Crucix tests
-      #   working-directory: ./aegis-crucix
-      #   run: npm test --if-present
+      - name: Run Crucix tests
+        working-directory: ./aegis-crucix
+        run: npm test --if-present
 
       - name: Install backend dependencies
         working-directory: ./aegis-backend
         run: npm ci || npm install
 
-      # - name: Run backend tests
-      #   working-directory: ./aegis-backend
-      #   run: npm test --if-present
+      - name: Run backend tests
+        working-directory: ./aegis-backend
+        run: npm test --if-present
 
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
           version: latest
 
-      # - name: Verify Supabase schema (optional strict check if remote db exists)
-      #   env:
-      #     SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      #     SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-      #   run: supabase db diff --project-id ${{ vars.SUPABASE_PROJECT_ID }}
+      - name: Verify Supabase schema (optional strict check if remote db exists)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase db diff --project-id ${{ vars.SUPABASE_PROJECT_ID }}
 
   deploy:
     name: Deploy to Railway & GHCR
