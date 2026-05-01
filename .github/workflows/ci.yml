@@ -111,6 +111,9 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
+          # Link project - project token authenticates, project ID sets context
+          railway link -p "${{ vars.RAILWAY_PROJECT_ID }}"
+
           # Delete stale services before recreating (free plan has service limits)
           railway service delete --service aegis-backend --yes || true
           railway service delete --service aegis-crucix --yes || true
