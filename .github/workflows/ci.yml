@@ -138,7 +138,7 @@ jobs:
           if [ -n "$services" ]; then
             for service in $services; do
               echo "Deleting service: $service"
-              railway service delete "$service" --yes
+              railway service delete --service "$service" --yes
             done
           else
             echo "No existing services found"
