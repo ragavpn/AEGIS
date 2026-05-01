@@ -117,9 +117,9 @@ jobs:
             PROJECT_ID=$(railway project)
             echo "RAILWAY_PROJECT_ID: $PROJECT_ID" >> $GITHUB_STEP_SUMMARY
             echo "Please set this as a repository variable vars.RAILWAY_PROJECT_ID for future deployments."
-            export RAILWAY_PROJECT_ID=$PROJECT_ID
+            railway link -p $PROJECT_ID
           else
-            export RAILWAY_PROJECT_ID="${{ vars.RAILWAY_PROJECT_ID }}"
+            railway link -p "${{ vars.RAILWAY_PROJECT_ID }}"
           fi
 
           # Ensure services exist (fails safely if they already exist)
@@ -130,7 +130,7 @@ jobs:
           sleep 5
 
           # Set vars for aegis-crucix
-          railway variables set --service aegis-crucix \
+          railway variable set --service aegis-crucix \
             AEGIS_SECRET="${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}" \
             LLM_API_KEY="${{ secrets.CRUCIX_LLM_API_KEY }}" \
             LLM_BASE_URL="https://models.inference.ai.azure.com/chat/completions" \
@@ -138,12 +138,11 @@ jobs:
             PORT="3117" \
             REFRESH_INTERVAL_MINUTES="15"
 
-          # Update image and deploy aegis-crucix
-          railway service update --service aegis-crucix --image ghcr.io/${{ github.repository }}/aegis-crucix:sha-${{ github.sha }}
-          railway up --service aegis-crucix --detach
+          # Deploy aegis-crucix directly from subdirectory
+          railway up aegis-crucix --service aegis-crucix --detach
 
           # Set vars for aegis-backend
-          railway variables set --service aegis-backend \
+          railway variable set --service aegis-backend \
             CRUCIX_BASE_URL="http://aegis-crucix.railway.internal:3117" \
             CRUCIX_SECRET="${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}" \
             ELEVENLABS_API_KEY="${{ secrets.ELEVENLABS_API_KEY }}" \
@@ -162,9 +161,8 @@ jobs:
             SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
             TTS_SERVICE="huggingface"
 
-          # Update image and deploy aegis-backend
-          railway service update --service aegis-backend --image ghcr.io/${{ github.repository }}/aegis-backend:sha-${{ github.sha }}
-          railway up --service aegis-backend --detach
+          # Deploy aegis-backend directly from subdirectory
+          railway up aegis-backend --service aegis-backend --detach
 
       - name: Wait for services to be ready
         run: sleep 45
