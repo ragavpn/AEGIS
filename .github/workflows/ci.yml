@@ -146,13 +146,10 @@ jobs:
 
           echo "Creating Crucix service..."
 
-          echo "Linking Crucix service context..."
-
-          railway service --service aegis-crucix
-
+          
           echo "Deploying Crucix service (Railway will create if missing)..."
 
-          railway variables set \
+          railway variables set --service aegis-crucix \\
             PORT=3117 \
             REFRESH_INTERVAL_MINUTES=15 \
             AEGIS_SECRET=${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }} \
@@ -168,13 +165,10 @@ jobs:
 
           echo "Creating Backend service..."
 
-          echo "Linking Backend service context..."
-
-          railway service --service aegis-backend
-
+          
           echo "Deploying Backend service (Railway will create if missing)..."
 
-          railway variables set \
+          railway variables set --service aegis-backend \\
             NODE_ENV=production \
             CRUCIX_BASE_URL=http://aegis-crucix.railway.internal:3117 \
             CRUCIX_SECRET=${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }} \
