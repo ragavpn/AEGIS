@@ -146,8 +146,8 @@ jobs:
 
           echo "Creating Crucix service..."
 
-          railway service create aegis-crucix
-          railway service connect aegis-crucix
+          railway service create --name aegis-crucix
+          railway service connect --service aegis-crucix
 
           railway variables set \
             PORT=3117 \
@@ -165,8 +165,8 @@ jobs:
 
           echo "Creating Backend service..."
 
-          railway service create aegis-backend
-          railway service connect aegis-backend
+          railway service create --name aegis-backend
+          railway service connect --service aegis-backend
 
           railway variables set \
             NODE_ENV=production \
