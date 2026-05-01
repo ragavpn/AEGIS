@@ -111,12 +111,21 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
-          # Project token is already scoped to the project - no link needed
-          # Ensure services exist (fails safely if they already exist)
-          railway add --service aegis-backend || true
-          railway add --service aegis-crucix || true
+          # Delete stale services before recreating (free plan has service limits)
+          railway service delete --service aegis-backend --yes || true
+          railway service delete --service aegis-crucix --yes || true
 
-          # Wait briefly for services to register
+          sleep 3
+
+          # Recreate services from Docker images already pushed to GHCR
+          railway add \
+            --service aegis-crucix \
+            --image ghcr.io/${{ env.REPO_LC }}/aegis-crucix:latest
+
+          railway add \
+            --service aegis-backend \
+            --image ghcr.io/${{ env.REPO_LC }}/aegis-backend:latest
+
           sleep 5
 
           # Set vars for aegis-crucix
@@ -127,9 +136,6 @@ jobs:
             LLM_MODEL="gpt-4o" \
             PORT="3117" \
             REFRESH_INTERVAL_MINUTES="15"
-
-          # Deploy aegis-crucix from its subdirectory
-          railway up --service aegis-crucix --detach aegis-crucix
 
           # Set vars for aegis-backend
           railway variable set --service aegis-backend \
@@ -150,9 +156,6 @@ jobs:
             SUPABASE_SERVICE_KEY="${{ secrets.SUPABASE_SERVICE_KEY }}" \
             SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
             TTS_SERVICE="huggingface"
-
-          # Deploy aegis-backend from its subdirectory
-          railway up --service aegis-backend --detach aegis-backend
 
       - name: Wait for services to be ready
         run: sleep 45
