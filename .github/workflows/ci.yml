@@ -114,45 +114,39 @@ jobs:
           REPO="ghcr.io/${{ github.repository_owner }}/aegis"
           SHA_TAG="sha-${{ github.sha }}"
 
-          # -----------------------------------------------------------
           # aegis-crucix: create/update service from GHCR image
-          # --image creates a new service or updates existing one
-          # -----------------------------------------------------------
           railway add \
             --service aegis-crucix \
             --image "$REPO/aegis-crucix:$SHA_TAG" \
-            --variables \
-              "AEGIS_SECRET=${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}" \
-              "LLM_API_KEY=${{ secrets.CRUCIX_LLM_API_KEY }}" \
-              "LLM_BASE_URL=https://models.inference.ai.azure.com/chat/completions" \
-              "LLM_MODEL=gpt-4o" \
-              "PORT=3117" \
-              "REFRESH_INTERVAL_MINUTES=15"
+            -v "AEGIS_SECRET=${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}" \
+            -v "LLM_API_KEY=${{ secrets.CRUCIX_LLM_API_KEY }}" \
+            -v "LLM_BASE_URL=https://models.inference.ai.azure.com/chat/completions" \
+            -v "LLM_MODEL=gpt-4o" \
+            -v "PORT=3117" \
+            -v "REFRESH_INTERVAL_MINUTES=15"
 
-          # -----------------------------------------------------------
           # aegis-backend: create/update service from GHCR image
-          # -----------------------------------------------------------
           railway add \
             --service aegis-backend \
             --image "$REPO/aegis-backend:$SHA_TAG" \
-            --variables \
-              "CRUCIX_BASE_URL=http://aegis-crucix.railway.internal:3117" \
-              "CRUCIX_SECRET=${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}" \
-              "ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}" \
-              "ELEVENLABS_VOICE_ID=JBFqnCBsd6RMkjVDRZzb" \
-              "FIREBASE_SERVICE_ACCOUNT=${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" \
-              "HF_TOKEN=${{ secrets.HF_TOKEN }}" \
-              "HUGGINGFACE_VOICE_ID=af_heart" \
-              "LLM_API_KEY=${{ secrets.BACKEND_LLM_API_KEY }}" \
-              "LLM_BASE_URL=https://models.inference.ai.azure.com/chat/completions" \
-              "LLM_MODEL=gpt-4o-mini" \
-              "NEO4J_PASSWORD=${{ secrets.NEO4J_PASSWORD }}" \
-              "NEO4J_URI=neo4j+s://07c6da35.databases.neo4j.io" \
-              "NEO4J_USERNAME=neo4j" \
-              "NODE_ENV=production" \
-              "SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}" \
-              "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" \
-              "TTS_SERVICE=huggingface"
+            -v "CRUCIX_BASE_URL=http://aegis-crucix.railway.internal:3117" \
+            -v "CRUCIX_SECRET=${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}" \
+            -v "ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}" \
+            -v "ELEVENLABS_VOICE_ID=JBFqnCBsd6RMkjVDRZzb" \
+            -v "FIREBASE_SERVICE_ACCOUNT=${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" \
+            -v "HF_TOKEN=${{ secrets.HF_TOKEN }}" \
+            -v "HUGGINGFACE_VOICE_ID=af_heart" \
+            -v "LLM_API_KEY=${{ secrets.BACKEND_LLM_API_KEY }}" \
+            -v "LLM_BASE_URL=https://models.inference.ai.azure.com/chat/completions" \
+            -v "LLM_MODEL=gpt-4o-mini" \
+            -v "NEO4J_PASSWORD=${{ secrets.NEO4J_PASSWORD }}" \
+            -v "NEO4J_URI=neo4j+s://07c6da35.databases.neo4j.io" \
+            -v "NEO4J_USERNAME=neo4j" \
+            -v "NODE_ENV=production" \
+            -v "SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -v "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" \
+            -v "TTS_SERVICE=huggingface"
+
 
       - name: Wait for services to be ready
         run: sleep 45
