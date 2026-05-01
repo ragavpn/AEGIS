@@ -117,12 +117,14 @@ jobs:
             PROJECT_ID=$(railway project)
             echo "RAILWAY_PROJECT_ID: $PROJECT_ID" >> $GITHUB_STEP_SUMMARY
             echo "Please set this as a repository variable vars.RAILWAY_PROJECT_ID for future deployments."
-            
-            railway service create --name aegis-backend
-            railway service create --name aegis-crucix
+            export RAILWAY_PROJECT_ID=$PROJECT_ID
           else
             export RAILWAY_PROJECT_ID="${{ vars.RAILWAY_PROJECT_ID }}"
           fi
+
+          # Ensure services exist (fails safely if they already exist)
+          railway service create --name aegis-backend || true
+          railway service create --name aegis-crucix || true
 
           # Wait briefly for link/creation to settle
           sleep 5
