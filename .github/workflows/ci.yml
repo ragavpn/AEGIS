@@ -27,6 +27,7 @@ jobs:
         run: |
           echo "SUPABASE_URL=\"${{ secrets.SUPABASE_URL }}\"" > secrets.properties
           echo "SUPABASE_ANON_KEY=\"${{ secrets.SUPABASE_ANON_KEY }}\"" >> secrets.properties
+          echo "AEGIS_API_BASE_URL=\"${{ vars.BACKEND_PUBLIC_URL || 'https://localhost' }}\"" >> secrets.properties
           touch local.properties
 
       - name: Grant execute permission for gradlew
@@ -203,6 +204,7 @@ jobs:
         run: |
           echo "SUPABASE_URL=\"${{ secrets.SUPABASE_URL }}\"" > secrets.properties
           echo "SUPABASE_ANON_KEY=\"${{ secrets.SUPABASE_ANON_KEY }}\"" >> secrets.properties
+          echo "AEGIS_API_BASE_URL=\"${{ vars.BACKEND_PUBLIC_URL || 'https://localhost' }}\"" >> secrets.properties
           touch local.properties
 
       - name: Grant execute permission for gradlew
