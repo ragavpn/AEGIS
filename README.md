@@ -8,8 +8,6 @@
 
 Aegis is an intelligent, voice-enabled Android client and backend system that provides real-time geopolitical intelligence and financial signals using Retrieval-Augmented Generation (RAG).
 
-![Aegis Preview](https://via.placeholder.com/800x400.png?text=AEGIS+Preview)
-
 ## 🏗 Architecture
 
 Aegis uses a modern, multi-tier architecture to securely process complex LLM workloads:
@@ -40,9 +38,8 @@ This monorepo contains the full stack:
 - `/aegis-backend/` — Node.js Express server orchestrating data, vector search, and graph querying
 - `/aegis-crucix/` — LLM gateway proxy (crucix) that securely bridges the backend to the Gemini API
 
-> **Note on Deployment:** To deploy `aegis-backend` and `aegis-crucix` to platform-as-a-service providers like Railway, they should be pushed to separate repositories:
-> - Backend: [https://github.com/ragavpn/aegis-backend](https://github.com/ragavpn/aegis-backend)
-> - Crucix: [https://github.com/ragavpn/Crucix](https://github.com/ragavpn/Crucix)
+> **Note on Deployment:** The previously separate repositories `aegis-backend`, `aegis-crucix`, and `aegis-android` are now deprecated. The AEGIS project is entirely maintained, built, and deployed as a unified monorepo via this repository.
+> The CI/CD pipeline defined in `.github/workflows/ci.yml` handles building and deploying the services.
 
 ---
 
@@ -127,12 +124,10 @@ To run the backend and crucix locally for development:
 ## ⚙️ CI/CD (GitHub Actions)
 
 This repository includes a comprehensive CI/CD pipeline (`.github/workflows/ci.yml`) that runs on every push and PR to `main`:
-1. **Backend Tests:** Runs `npm ci` and `npm test` to verify business logic.
-2. **Android Tests:** Runs `./gradlew testDebugUnitTest` to verify Android ViewModels and repository logic.
-3. **Android Build:** Runs `./gradlew assembleDebug` to guarantee the Android app compiles cleanly.
-4. **Docker Build:** Runs `docker compose build` to validate the backend and crucix container configurations.
-
-*(Release APK generation requires local keystores and is not automated via CI.)*
+1. **Validation & Android Build:** Runs unit tests, validates Supabase migrations, and builds an Android Debug APK.
+2. **Docker Build & Deploy (main only):** Builds Docker images for `aegis-backend` and `aegis-crucix`, pushes to GHCR, and deploys them to Railway. Requires `DEPLOY=true` repository variable.
+3. **Database Migrations (main only):** Runs `supabase db push` to keep the database schema in sync.
+4. **Android Release Build:** Builds a signed Android release APK when appropriate Keystore secrets are provided.
 
 ---
 
