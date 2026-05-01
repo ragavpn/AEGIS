@@ -27,6 +27,7 @@ jobs:
         run: |
           echo "SUPABASE_URL=\"${{ secrets.SUPABASE_URL }}\"" > secrets.properties
           echo "SUPABASE_ANON_KEY=\"${{ secrets.SUPABASE_ANON_KEY }}\"" >> secrets.properties
+          touch local.properties
 
       - name: Grant execute permission for gradlew
         working-directory: ./aegis-android
@@ -199,6 +200,7 @@ jobs:
         run: |
           echo "SUPABASE_URL=\"${{ secrets.SUPABASE_URL }}\"" > secrets.properties
           echo "SUPABASE_ANON_KEY=\"${{ secrets.SUPABASE_ANON_KEY }}\"" >> secrets.properties
+          touch local.properties
 
       - name: Grant execute permission for gradlew
         working-directory: ./aegis-android
