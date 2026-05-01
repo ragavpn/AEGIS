@@ -104,46 +104,19 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Install Railway CLI
+        run: npm i -g @railway/cli
+
       - name: Deploy to Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
-          # NOTE: Services must be pre-created manually in Railway dashboard
-          # pointing at ghcr.io/$REPO/aegis-crucix:latest and ghcr.io/$REPO/aegis-backend:latest
-          # This step only updates env vars and triggers a redeploy.
+          # Project token supports: railway up, railway redeploy, railway logs ONLY
+          # Deploy aegis-crucix from its subdirectory
+          railway up --service aegis-crucix --ci ./aegis-crucix
 
-          # Set vars for aegis-crucix (triggers redeploy automatically)
-          railway variable set --service aegis-crucix \
-            AEGIS_SECRET="${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}" \
-            LLM_API_KEY="${{ secrets.CRUCIX_LLM_API_KEY }}" \
-            LLM_BASE_URL="https://models.inference.ai.azure.com/chat/completions" \
-            LLM_MODEL="gpt-4o" \
-            PORT="3117" \
-            REFRESH_INTERVAL_MINUTES="15"
-
-          # Set vars for aegis-backend (triggers redeploy automatically)
-          railway variable set --service aegis-backend \
-            CRUCIX_BASE_URL="http://aegis-crucix.railway.internal:3117" \
-            CRUCIX_SECRET="${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}" \
-            ELEVENLABS_API_KEY="${{ secrets.ELEVENLABS_API_KEY }}" \
-            ELEVENLABS_VOICE_ID="JBFqnCBsd6RMkjVDRZzb" \
-            FIREBASE_SERVICE_ACCOUNT="${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" \
-            HF_TOKEN="${{ secrets.HF_TOKEN }}" \
-            HUGGINGFACE_VOICE_ID="af_heart" \
-            LLM_API_KEY="${{ secrets.BACKEND_LLM_API_KEY }}" \
-            LLM_BASE_URL="https://models.inference.ai.azure.com/chat/completions" \
-            LLM_MODEL="gpt-4o-mini" \
-            NEO4J_PASSWORD="${{ secrets.NEO4J_PASSWORD }}" \
-            NEO4J_URI="neo4j+s://07c6da35.databases.neo4j.io" \
-            NEO4J_USERNAME="neo4j" \
-            NODE_ENV="production" \
-            SUPABASE_SERVICE_KEY="${{ secrets.SUPABASE_SERVICE_KEY }}" \
-            SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
-            TTS_SERVICE="huggingface"
-
-          # Force redeploy to pull the latest image from GHCR
-          railway service redeploy --service aegis-crucix --yes || true
-          railway service redeploy --service aegis-backend --yes || true
+          # Deploy aegis-backend from its subdirectory
+          railway up --service aegis-backend --ci ./aegis-backend
 
       - name: Wait for services to be ready
         run: sleep 45
