@@ -123,8 +123,8 @@ jobs:
           fi
 
           # Ensure services exist (fails safely if they already exist)
-          railway service create --name aegis-backend || true
-          railway service create --name aegis-crucix || true
+          railway add --service aegis-backend || true
+          railway add --service aegis-crucix || true
 
           # Wait briefly for link/creation to settle
           sleep 5
