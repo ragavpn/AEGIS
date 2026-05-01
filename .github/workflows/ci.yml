@@ -206,12 +206,12 @@ jobs:
 
       - name: Create Keystore
         working-directory: ./aegis-android
-        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > upload-keystore.jks
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > upload-keystore.keystore
 
       - name: Create keystore.properties
         working-directory: ./aegis-android
         run: |
-          echo "storeFile=upload-keystore.jks" > keystore.properties
+          echo "storeFile=upload-keystore.keystore" > keystore.properties
           echo "storePassword=${{ secrets.ANDROID_STORE_PASSWORD }}" >> keystore.properties
           echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" >> keystore.properties
           echo "keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}" >> keystore.properties
