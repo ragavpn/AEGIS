@@ -107,14 +107,10 @@ jobs:
       - name: Install Railway CLI
         run: npm i -g @railway/cli
 
-      - name: Deploy to Railway
+      - name: Set variables for aegis-crucix
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
-          # Deploy aegis-crucix (creates service if needed, builds Dockerfile)
-          railway up --service aegis-crucix --ci ./aegis-crucix
-
-          # Set environment variables for aegis-crucix (triggers auto-redeploy)
           railway variable set --service aegis-crucix \
             AEGIS_SECRET="${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}" \
             LLM_API_KEY="${{ secrets.CRUCIX_LLM_API_KEY }}" \
@@ -123,10 +119,10 @@ jobs:
             PORT="3117" \
             REFRESH_INTERVAL_MINUTES="15"
 
-          # Deploy aegis-backend (creates service if needed, builds Dockerfile)
-          railway up --service aegis-backend --ci ./aegis-backend
-
-          # Set environment variables for aegis-backend (triggers auto-redeploy)
+      - name: Set variables for aegis-backend
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
           railway variable set --service aegis-backend \
             CRUCIX_BASE_URL="http://aegis-crucix.railway.internal:3117" \
             CRUCIX_SECRET="${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}" \
@@ -145,6 +141,45 @@ jobs:
             SUPABASE_SERVICE_KEY="${{ secrets.SUPABASE_SERVICE_KEY }}" \
             SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
             TTS_SERVICE="huggingface"
+
+      - name: Deploy GHCR images to Railway via GraphQL API
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          REPO="ghcr.io/${{ github.repository_owner }}/aegis"
+
+          # Helper: get service ID by name
+          get_service_id() {
+            local name=$1
+            curl -s -X POST https://backboard.railway.com/graphql/v2 \
+              -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"query\":\"{ project(id: \\\"$RAILWAY_PROJECT_ID\\\") { services { edges { node { id name } } } } }\"}" \
+              | python3 -c "import sys,json; data=json.load(sys.stdin); [print(s['node']['id']) for s in data['data']['project']['services']['edges'] if s['node']['name']=='$name']"
+          }
+
+          # Helper: update service image and deploy
+          deploy_image() {
+            local service_id=$1
+            local image=$2
+            curl -s -X POST https://backboard.railway.com/graphql/v2 \
+              -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"query\":\"mutation { serviceInstanceUpdate(serviceId: \\\"$service_id\\\", environmentId: null, input: { source: { image: \\\"$image\\\" } }) }\"}"
+          }
+
+          # Deploy aegis-crucix from GHCR
+          CRUCIX_ID=$(get_service_id "aegis-crucix")
+          echo "aegis-crucix service ID: $CRUCIX_ID"
+          deploy_image "$CRUCIX_ID" "$REPO/aegis-crucix:$IMAGE_TAG"
+
+          # Deploy aegis-backend from GHCR
+          BACKEND_ID=$(get_service_id "aegis-backend")
+          echo "aegis-backend service ID: $BACKEND_ID"
+          deploy_image "$BACKEND_ID" "$REPO/aegis-backend:$IMAGE_TAG"
+
 
       - name: Wait for services to be ready
         run: sleep 45
