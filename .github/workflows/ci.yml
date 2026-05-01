@@ -33,6 +33,11 @@ jobs:
         working-directory: ./aegis-android
         run: chmod +x gradlew
 
+      - name: Create google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: echo "$GOOGLE_SERVICES_JSON" > aegis-android/app/google-services.json
+
       - name: Build Android Debug APK (Validation)
         working-directory: ./aegis-android
         run: ./gradlew assembleDebug
@@ -217,6 +222,11 @@ jobs:
           echo "storePassword=${{ secrets.ANDROID_STORE_PASSWORD }}" >> keystore.properties
           echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" >> keystore.properties
           echo "keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}" >> keystore.properties
+
+      - name: Create google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: echo "$GOOGLE_SERVICES_JSON" > aegis-android/app/google-services.json
 
       - name: Build Release APK
         working-directory: ./aegis-android
