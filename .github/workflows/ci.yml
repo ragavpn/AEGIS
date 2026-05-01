@@ -106,6 +106,37 @@ jobs:
       - name: Install Railway CLI
         run: npm i -g @railway/cli
 
+      # -----------------------------------------------------------------------
+      # Resolve the production environment UUID and store it in GITHUB_ENV so
+      # every subsequent step can use it as RAILWAY_ENVIRONMENT_ID.
+      # The Railway CLI requires the UUID (not the name) via this env var.
+      # -----------------------------------------------------------------------
+      - name: Resolve Railway environment ID
+        id: railway_env
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          set -e
+          PROJECT_ID="${{ vars.RAILWAY_PROJECT_ID }}"
+
+          RESP=$(curl -sf -X POST https://backboard.railway.com/graphql/v2 \
+            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"query\":\"{ project(id: \\\"$PROJECT_ID\\\") { environments { edges { node { id name } } } } }\"}")
+
+          echo "Environments: $RESP"
+
+          ENV_ID=$(echo "$RESP" | \
+            jq -r '.data.project.environments.edges[] | select(.node.name=="production") | .node.id')
+
+          if [ -z "$ENV_ID" ]; then
+            echo "ERROR: Could not find production environment in project $PROJECT_ID"
+            exit 1
+          fi
+
+          echo "Production environment ID: $ENV_ID"
+          echo "RAILWAY_ENVIRONMENT_ID=$ENV_ID" >> "$GITHUB_ENV"
+
       - name: Delete existing Railway services
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
@@ -113,7 +144,7 @@ jobs:
           set -e
           PROJECT_ID="${{ vars.RAILWAY_PROJECT_ID }}"
 
-          echo ">>> Fetching current services in project $PROJECT_ID..."
+          echo ">>> Fetching current services..."
           SERVICES=$(curl -sf -X POST https://backboard.railway.com/graphql/v2 \
             -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
             -H "Content-Type: application/json" \
@@ -134,6 +165,8 @@ jobs:
           echo ">>> Waiting for deletions to settle..."
           sleep 8
 
+      # RAILWAY_ENVIRONMENT_ID is now set in the environment from the resolve
+      # step above. The CLI picks it up automatically — no flag needed.
       - name: Create aegis-crucix service
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
@@ -146,8 +179,7 @@ jobs:
           echo ">>> Creating aegis-crucix from $REPO/aegis-crucix:$SHA_TAG"
           railway add \
             --image "$REPO/aegis-crucix:$SHA_TAG" \
-            --service aegis-crucix \
-            --environment production
+            --service aegis-crucix
 
       - name: Set aegis-crucix variables
         env:
@@ -162,8 +194,7 @@ jobs:
             "LLM_MODEL=gpt-4o" \
             "PORT=3117" \
             "REFRESH_INTERVAL_MINUTES=15" \
-            --service aegis-crucix \
-            --environment production
+            --service aegis-crucix
 
       - name: Create aegis-backend service
         env:
@@ -177,8 +208,7 @@ jobs:
           echo ">>> Creating aegis-backend from $REPO/aegis-backend:$SHA_TAG"
           railway add \
             --image "$REPO/aegis-backend:$SHA_TAG" \
-            --service aegis-backend \
-            --environment production
+            --service aegis-backend
 
       - name: Set aegis-backend variables
         env:
@@ -206,7 +236,6 @@ jobs:
             "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" \
             "TTS_SERVICE=huggingface" \
             --service aegis-backend \
-            --environment production \
             --skip-deploys
 
           # FIREBASE_SERVICE_ACCOUNT is a JSON blob — pipe via stdin to avoid
@@ -215,8 +244,7 @@ jobs:
           echo "$FIREBASE_SERVICE_ACCOUNT" | \
             railway variable set FIREBASE_SERVICE_ACCOUNT \
               --stdin \
-              --service aegis-backend \
-              --environment production
+              --service aegis-backend
 
       - name: Generate public domain for aegis-backend
         env:
@@ -225,9 +253,7 @@ jobs:
         run: |
           set -e
           echo ">>> Generating Railway domain for aegis-backend..."
-          railway domain \
-            --service aegis-backend \
-            --environment production
+          railway domain --service aegis-backend
 
       - name: Wait for services to be ready
         run: sleep 60
