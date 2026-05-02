@@ -149,6 +149,12 @@ jobs:
           
           echo "Deploying Crucix service (Railway will create if missing)..."
 
+          # First deploy to create the service if it does not exist
+          railway up \
+            --service aegis-crucix \
+            --image ghcr.io/${{ env.REPO_LC }}/aegis-crucix:sha-${{ github.sha }}
+
+          # Now set variables after service exists
           railway variables set --service aegis-crucix PORT=3117
           railway variables set --service aegis-crucix REFRESH_INTERVAL_MINUTES=15
           railway variables set --service aegis-crucix AEGIS_SECRET=${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}
@@ -158,6 +164,7 @@ jobs:
           railway variables set --service aegis-crucix RAILWAY_REGISTRY_AUTH_USERNAME=${{ github.actor }}
           railway variables set --service aegis-crucix RAILWAY_REGISTRY_AUTH_PASSWORD=${{ secrets.GHCR_TOKEN }}
 
+          # Redeploy after variables are set
           railway up \
             --service aegis-crucix \
             --image ghcr.io/${{ env.REPO_LC }}/aegis-crucix:sha-${{ github.sha }}
@@ -167,6 +174,12 @@ jobs:
           
           echo "Deploying Backend service (Railway will create if missing)..."
 
+          # First deploy to create backend service if it does not exist
+          railway up \
+            --service aegis-backend \
+            --image ghcr.io/${{ env.REPO_LC }}/aegis-backend:sha-${{ github.sha }}
+
+          # Now set variables after service exists
           railway variables set --service aegis-backend NODE_ENV=production
           railway variables set --service aegis-backend CRUCIX_BASE_URL=http://aegis-crucix.railway.internal:3117
           railway variables set --service aegis-backend CRUCIX_SECRET=${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}
@@ -184,6 +197,7 @@ jobs:
           railway variables set --service aegis-backend SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}
           railway variables set --service aegis-backend SUPABASE_URL=${{ secrets.SUPABASE_URL }}
 
+          # Redeploy after variables are set
           railway up \
             --service aegis-backend \
             --image ghcr.io/${{ env.REPO_LC }}/aegis-backend:sha-${{ github.sha }}
