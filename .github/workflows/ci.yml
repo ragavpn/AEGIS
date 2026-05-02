@@ -149,15 +149,14 @@ jobs:
           
           echo "Deploying Crucix service (Railway will create if missing)..."
 
-          railway variables set --service aegis-crucix \\
-            PORT=3117 \
-            REFRESH_INTERVAL_MINUTES=15 \
-            AEGIS_SECRET=${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }} \
-            LLM_API_KEY=${{ secrets.CRUCIX_LLM_API_KEY }} \
-            LLM_BASE_URL=https://models.inference.ai.azure.com/chat/completions \
-            LLM_MODEL=gpt-4o \
-            RAILWAY_REGISTRY_AUTH_USERNAME=${{ github.actor }} \
-            RAILWAY_REGISTRY_AUTH_PASSWORD=${{ secrets.GHCR_TOKEN }}
+          railway variables set --service aegis-crucix PORT=3117
+          railway variables set --service aegis-crucix REFRESH_INTERVAL_MINUTES=15
+          railway variables set --service aegis-crucix AEGIS_SECRET=${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}
+          railway variables set --service aegis-crucix LLM_API_KEY=${{ secrets.CRUCIX_LLM_API_KEY }}
+          railway variables set --service aegis-crucix LLM_BASE_URL=https://models.inference.ai.azure.com/chat/completions
+          railway variables set --service aegis-crucix LLM_MODEL=gpt-4o
+          railway variables set --service aegis-crucix RAILWAY_REGISTRY_AUTH_USERNAME=${{ github.actor }}
+          railway variables set --service aegis-crucix RAILWAY_REGISTRY_AUTH_PASSWORD=${{ secrets.GHCR_TOKEN }}
 
           railway up \
             --service aegis-crucix \
@@ -168,23 +167,22 @@ jobs:
           
           echo "Deploying Backend service (Railway will create if missing)..."
 
-          railway variables set --service aegis-backend \\
-            NODE_ENV=production \
-            CRUCIX_BASE_URL=http://aegis-crucix.railway.internal:3117 \
-            CRUCIX_SECRET=${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }} \
-            ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }} \
-            ELEVENLABS_VOICE_ID=JBFqnCBsd6RMkjVDRZzb \
-            FIREBASE_SERVICE_ACCOUNT=${{ secrets.FIREBASE_SERVICE_ACCOUNT }} \
-            HF_TOKEN=${{ secrets.HF_TOKEN }} \
-            HUGGINGFACE_VOICE_ID=af_heart \
-            LLM_API_KEY=${{ secrets.BACKEND_LLM_API_KEY }} \
-            LLM_BASE_URL=https://models.inference.ai.azure.com/chat/completions \
-            LLM_MODEL=gpt-4o-mini \
-            NEO4J_PASSWORD=${{ secrets.NEO4J_PASSWORD }} \
-            NEO4J_URI=neo4j+s://07c6da35.databases.neo4j.io \
-            NEO4J_USERNAME=neo4j \
-            SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }} \
-            SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          railway variables set --service aegis-backend NODE_ENV=production
+          railway variables set --service aegis-backend CRUCIX_BASE_URL=http://aegis-crucix.railway.internal:3117
+          railway variables set --service aegis-backend CRUCIX_SECRET=${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}
+          railway variables set --service aegis-backend ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}
+          railway variables set --service aegis-backend ELEVENLABS_VOICE_ID=JBFqnCBsd6RMkjVDRZzb
+          railway variables set --service aegis-backend FIREBASE_SERVICE_ACCOUNT=${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          railway variables set --service aegis-backend HF_TOKEN=${{ secrets.HF_TOKEN }}
+          railway variables set --service aegis-backend HUGGINGFACE_VOICE_ID=af_heart
+          railway variables set --service aegis-backend LLM_API_KEY=${{ secrets.BACKEND_LLM_API_KEY }}
+          railway variables set --service aegis-backend LLM_BASE_URL=https://models.inference.ai.azure.com/chat/completions
+          railway variables set --service aegis-backend LLM_MODEL=gpt-4o-mini
+          railway variables set --service aegis-backend NEO4J_PASSWORD=${{ secrets.NEO4J_PASSWORD }}
+          railway variables set --service aegis-backend NEO4J_URI=neo4j+s://07c6da35.databases.neo4j.io
+          railway variables set --service aegis-backend NEO4J_USERNAME=neo4j
+          railway variables set --service aegis-backend SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}
+          railway variables set --service aegis-backend SUPABASE_URL=${{ secrets.SUPABASE_URL }}
 
           railway up \
             --service aegis-backend \
