@@ -117,90 +117,67 @@ jobs:
 
       - name: Deploy to Railway (clean recreate services)
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
           PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
         run: |
-          set -e
+          set -euo pipefail
 
-          echo "Using Railway project token authentication..."
+          echo "Linking project..."
+          railway link --project "$PROJECT_ID"
 
-          export RAILWAY_TOKEN=${{ secrets.RAILWAY_TOKEN }}
-          export RAILWAY_PROJECT_ID=$PROJECT_ID
+          echo "Deleting existing services in the project..."
+          SERVICES_JSON=$(curl -fsSL https://backboard.railway.com/graphql/v2 \
+            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-raw "$(jq -n --arg id "$PROJECT_ID" '{query:"query project($id: String!) { project(id: $id) { services { edges { node { id name } } } } }", variables:{id:$id}}')")
 
-          echo "Verifying access to project..."
-
-          railway service list || echo "No services yet"
-
-          echo "Deleting existing services (required for free plan)..."
-
-          services=$(railway service list --json 2>/dev/null | jq -r '.[].name' || true)
-
-          if [ -n "$services" ]; then
-            for service in $services; do
-              echo "Deleting service: $service"
-              railway service delete --service "$service" --yes
-            done
+          SERVICE_IDS=$(printf '%s' "$SERVICES_JSON" | jq -r '.data.project.services.edges[].node.id // empty')
+          if [ -n "$SERVICE_IDS" ]; then
+            while IFS= read -r SERVICE_ID; do
+              [ -n "$SERVICE_ID" ] || continue
+              echo "Deleting service id: $SERVICE_ID"
+              curl -fsSL https://backboard.railway.com/graphql/v2 \
+                -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+                -H "Content-Type: application/json" \
+                --data-raw "$(jq -n --arg id "$SERVICE_ID" '{query:"mutation serviceDelete($id: String!) { serviceDelete(id: $id) }", variables:{id:$id}}')" >/dev/null
+            done <<< "$SERVICE_IDS"
           else
             echo "No existing services found"
           fi
 
-          echo "Creating Crucix service..."
+          echo "Creating Crucix service from Docker image..."
+          railway add -s aegis-crucix -i ghcr.io/${{ env.REPO_LC }}/aegis-crucix:sha-${{ github.sha }}
 
-          
-          echo "Deploying Crucix service (Railway will create if missing)..."
+          railway variables set -s aegis-crucix PORT=3117 --skip-deploys
+          railway variables set -s aegis-crucix REFRESH_INTERVAL_MINUTES=15 --skip-deploys
+          railway variables set -s aegis-crucix AEGIS_SECRET=${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }} --skip-deploys
+          railway variables set -s aegis-crucix LLM_API_KEY=${{ secrets.CRUCIX_LLM_API_KEY }} --skip-deploys
+          railway variables set -s aegis-crucix LLM_BASE_URL=https://models.inference.ai.azure.com/chat/completions --skip-deploys
+          railway variables set -s aegis-crucix LLM_MODEL=gpt-4o --skip-deploys
 
-          # First deploy to create the service if it does not exist
-          railway up \
-            --service aegis-crucix \
-            --image ghcr.io/${{ env.REPO_LC }}/aegis-crucix:sha-${{ github.sha }}
+          echo "Creating Backend service from Docker image..."
+          railway add -s aegis-backend -i ghcr.io/${{ env.REPO_LC }}/aegis-backend:sha-${{ github.sha }}
 
-          # Now set variables after service exists
-          railway variables set --service aegis-crucix PORT=3117
-          railway variables set --service aegis-crucix REFRESH_INTERVAL_MINUTES=15
-          railway variables set --service aegis-crucix AEGIS_SECRET=${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}
-          railway variables set --service aegis-crucix LLM_API_KEY=${{ secrets.CRUCIX_LLM_API_KEY }}
-          railway variables set --service aegis-crucix LLM_BASE_URL=https://models.inference.ai.azure.com/chat/completions
-          railway variables set --service aegis-crucix LLM_MODEL=gpt-4o
-          railway variables set --service aegis-crucix RAILWAY_REGISTRY_AUTH_USERNAME=${{ github.actor }}
-          railway variables set --service aegis-crucix RAILWAY_REGISTRY_AUTH_PASSWORD=${{ secrets.GHCR_TOKEN }}
+          railway variables set -s aegis-backend NODE_ENV=production --skip-deploys
+          railway variables set -s aegis-backend CRUCIX_BASE_URL=http://aegis-crucix.railway.internal:3117 --skip-deploys
+          railway variables set -s aegis-backend CRUCIX_SECRET=${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }} --skip-deploys
+          railway variables set -s aegis-backend ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }} --skip-deploys
+          railway variables set -s aegis-backend ELEVENLABS_VOICE_ID=JBFqnCBsd6RMkjVDRZzb --skip-deploys
+          printf '%s' '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' | railway variables set -s aegis-backend FIREBASE_SERVICE_ACCOUNT --stdin --skip-deploys
+          railway variables set -s aegis-backend HF_TOKEN=${{ secrets.HF_TOKEN }} --skip-deploys
+          railway variables set -s aegis-backend HUGGINGFACE_VOICE_ID=af_heart --skip-deploys
+          railway variables set -s aegis-backend LLM_API_KEY=${{ secrets.BACKEND_LLM_API_KEY }} --skip-deploys
+          railway variables set -s aegis-backend LLM_BASE_URL=https://models.inference.ai.azure.com/chat/completions --skip-deploys
+          railway variables set -s aegis-backend LLM_MODEL=gpt-4o-mini --skip-deploys
+          railway variables set -s aegis-backend NEO4J_PASSWORD=${{ secrets.NEO4J_PASSWORD }} --skip-deploys
+          railway variables set -s aegis-backend NEO4J_URI=neo4j+s://07c6da35.databases.neo4j.io --skip-deploys
+          railway variables set -s aegis-backend NEO4J_USERNAME=neo4j --skip-deploys
+          railway variables set -s aegis-backend SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }} --skip-deploys
+          railway variables set -s aegis-backend SUPABASE_URL=${{ secrets.SUPABASE_URL }} --skip-deploys
 
-          # Redeploy after variables are set
-          railway up \
-            --service aegis-crucix \
-            --image ghcr.io/${{ env.REPO_LC }}/aegis-crucix:sha-${{ github.sha }}
-
-          echo "Creating Backend service..."
-
-          
-          echo "Deploying Backend service (Railway will create if missing)..."
-
-          # First deploy to create backend service if it does not exist
-          railway up \
-            --service aegis-backend \
-            --image ghcr.io/${{ env.REPO_LC }}/aegis-backend:sha-${{ github.sha }}
-
-          # Now set variables after service exists
-          railway variables set --service aegis-backend NODE_ENV=production
-          railway variables set --service aegis-backend CRUCIX_BASE_URL=http://aegis-crucix.railway.internal:3117
-          railway variables set --service aegis-backend CRUCIX_SECRET=${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}
-          railway variables set --service aegis-backend ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}
-          railway variables set --service aegis-backend ELEVENLABS_VOICE_ID=JBFqnCBsd6RMkjVDRZzb
-          railway variables set --service aegis-backend FIREBASE_SERVICE_ACCOUNT=${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          railway variables set --service aegis-backend HF_TOKEN=${{ secrets.HF_TOKEN }}
-          railway variables set --service aegis-backend HUGGINGFACE_VOICE_ID=af_heart
-          railway variables set --service aegis-backend LLM_API_KEY=${{ secrets.BACKEND_LLM_API_KEY }}
-          railway variables set --service aegis-backend LLM_BASE_URL=https://models.inference.ai.azure.com/chat/completions
-          railway variables set --service aegis-backend LLM_MODEL=gpt-4o-mini
-          railway variables set --service aegis-backend NEO4J_PASSWORD=${{ secrets.NEO4J_PASSWORD }}
-          railway variables set --service aegis-backend NEO4J_URI=neo4j+s://07c6da35.databases.neo4j.io
-          railway variables set --service aegis-backend NEO4J_USERNAME=neo4j
-          railway variables set --service aegis-backend SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}
-          railway variables set --service aegis-backend SUPABASE_URL=${{ secrets.SUPABASE_URL }}
-
-          # Redeploy after variables are set
-          railway up \
-            --service aegis-backend \
-            --image ghcr.io/${{ env.REPO_LC }}/aegis-backend:sha-${{ github.sha }}
+          echo "Redeploying services..."
+          railway redeploy --service aegis-crucix --yes
+          railway redeploy --service aegis-backend --yes
 
           echo "Deployment complete"
 
