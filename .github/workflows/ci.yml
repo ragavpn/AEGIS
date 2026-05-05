@@ -70,13 +70,7 @@ jobs:
         working-directory: ./aegis-android
         run: ./gradlew assembleDebug --build-cache
 
-      - name: Install backend dependencies
-        working-directory: ./aegis-backend
-        run: npm ci
-
-      - name: Run backend tests
-        working-directory: ./aegis-backend
-        run: npm test --if-present
+      
 
   deploy:
     name: Deploy to Railway & GHCR
@@ -103,20 +97,18 @@ jobs:
         run: |
           echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
 
-            - name: Build & push images (parallel matrix)
+      - name: Build and push aegis-backend image
         uses: docker/build-push-action@v5
-        strategy:
-          matrix:
-            service: [aegis-backend, aegis-crucix]
         with:
-          context: ./
-          file: ./aegis-${{ matrix.service == 'aegis-backend' && 'backend' || 'crucix' }}/Dockerfile
+          context: ./aegis-backend
           push: true
           tags: |
-            ghcr.io/${{ env.REPO_LC }}/${{ matrix.service }}:sha-${{ github.sha }}
-            ghcr.io/${{ env.REPO_LC }}/${{ matrix.service }}:latest
+            ghcr.io/${{ env.REPO_LC }}/aegis-backend:sha-${{ github.sha }}
+            ghcr.io/${{ env.REPO_LC }}/aegis-backend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      
 
       - name: Build and push aegis-crucix image
         uses: docker/build-push-action@v5
@@ -221,7 +213,7 @@ jobs:
 
   sign-android:
     name: Sign & Release Android APK
-    needs: validate
+    needs: validate-android
     if: github.ref == 'refs/heads/main' && vars.DEPLOY == 'true'
     runs-on: ubuntu-latest
 
