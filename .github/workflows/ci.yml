@@ -7,10 +7,35 @@ on:
     branches: [ "main" ]
 
 jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      crucix: ${{ steps.filter.outputs.crucix }}
+      android: ${{ steps.filter.outputs.android }}
+      workflow: ${{ steps.filter.outputs.workflow }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'aegis-backend/**'
+            crucix:
+              - 'aegis-crucix/**'
+            android:
+              - 'aegis-android/**'
+            workflow:
+              - '.github/workflows/**'
+
+
   validate-backend:
     name: Validate Backend
     runs-on: ubuntu-latest
-    if: "!contains(github.event.head_commit.message, '[skip-validate]')"
+    needs: changes
+    if: (needs.changes.outputs.backend == 'true' || needs.changes.outputs.workflow == 'true') && !contains(github.event.head_commit.message, '[skip-validate]')
     steps:
       - uses: actions/checkout@v4
       - name: Setup Node (cache)
@@ -29,7 +54,8 @@ jobs:
   validate-crucix:
     name: Validate Crucix
     runs-on: ubuntu-latest
-    if: "!contains(github.event.head_commit.message, '[skip-validate]')"
+    needs: changes
+    if: (needs.changes.outputs.crucix == 'true' || needs.changes.outputs.workflow == 'true') && !contains(github.event.head_commit.message, '[skip-validate]')
     steps:
       - uses: actions/checkout@v4
       - name: Setup Node (cache)
@@ -48,7 +74,8 @@ jobs:
   validate-android:
     name: Validate Android
     runs-on: ubuntu-latest
-    if: "!contains(github.event.head_commit.message, '[skip-validate]')"
+    needs: changes
+    if: (needs.changes.outputs.android == 'true' || needs.changes.outputs.workflow == 'true') && !contains(github.event.head_commit.message, '[skip-validate]')
     steps:
       - uses: actions/checkout@v4
         with:
@@ -81,8 +108,12 @@ jobs:
 
   deploy:
     name: Deploy to Railway & GHCR
-    needs: [validate-backend, validate-crucix, validate-android]
-    if: github.ref == 'refs/heads/main' && vars.DEPLOY == 'true'
+    needs: [changes, validate-backend, validate-crucix, validate-android]
+    if: |
+      (always() && github.ref == 'refs/heads/main' && vars.DEPLOY == 'true') &&
+      (needs.validate-backend.result == 'success' || needs.validate-backend.result == 'skipped') &&
+      (needs.validate-crucix.result == 'success' || needs.validate-crucix.result == 'skipped') &&
+      (needs.validate-android.result == 'success' || needs.validate-android.result == 'skipped')
     runs-on: ubuntu-latest
 
     steps:
@@ -105,6 +136,7 @@ jobs:
           echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
 
       - name: Build and push aegis-backend image
+        if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.workflow == 'true'
         uses: docker/build-push-action@v5
         with:
           context: ./aegis-backend
@@ -118,6 +150,7 @@ jobs:
       
 
       - name: Build and push aegis-crucix image
+        if: needs.changes.outputs.crucix == 'true' || needs.changes.outputs.workflow == 'true'
         uses: docker/build-push-action@v5
         with:
           context: ./aegis-crucix
@@ -199,7 +232,17 @@ jobs:
           echo "Deploy images (from GHCR)..."
           deploy_img(){ api "$(jq -n --arg sid \"$1\" --arg img \"$2\" '{query:"mutation($sid:String!,$img:String!){ deploymentCreate(input:{serviceId:$sid,source:{image:$img}}){ id } }", variables:{sid:$sid,img:$img}}')" >/dev/null; }
 
-          deploy_img "$CRUCIX_ID" "ghcr.io/${REPO_LC}/aegis-crucix:sha-${SHA}"
+          if [ "${{ needs.changes.outputs.crucix }}" = "true" ] || [ "${{ needs.changes.outputs.workflow }}" = "true" ]; then
+            deploy_img "$CRUCIX_ID" "ghcr.io/${REPO_LC}/aegis-crucix:sha-${SHA}"
+          fi
+
+          if [ "${{ needs.changes.outputs.backend }}" = "true" ] || [ "${{ needs.changes.outputs.workflow }}" = "true" ]; then
+            deploy_img "$BACKEND_ID" "ghcr.io/${REPO_LC}/aegis-backend:sha-${SHA}"
+          fi
+
+          echo "Deployment complete"
+
+          # original lines removed "ghcr.io/${REPO_LC}/aegis-crucix:sha-${SHA}"
           deploy_img "$BACKEND_ID" "ghcr.io/${REPO_LC}/aegis-backend:sha-${SHA}"
 
           echo "Deployment complete"
