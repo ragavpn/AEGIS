@@ -197,7 +197,25 @@ jobs:
 
           echo "Fetch project + environment..."
           PROJECT_JSON=$(retry fetch_project)
-          ENV_ID=$(printf '%s' "$PROJECT_JSON" | jq -r '.data.project.environments.edges[0].node.id')
+          # Resolve environment (prefer production, fallback to first)
+          ENV_ID=$(printf '%s' "$PROJECT_JSON" | jq -r '
+            .data.project.environments.edges[]?.node
+            | select(.name == "production")
+            | .id
+          ' | head -n1)
+
+          if [ -z "$ENV_ID" ] || [ "$ENV_ID" = "null" ]; then
+            echo "No explicit production env, falling back..."
+            ENV_ID=$(printf '%s' "$PROJECT_JSON" | jq -r '.data.project.environments.edges[0]?.node.id')
+          fi
+
+          if [ -z "$ENV_ID" ] || [ "$ENV_ID" = "null" ]; then
+            echo "Failed to resolve ENV_ID"
+            echo "$PROJECT_JSON" | jq
+            exit 1
+          fi
+
+          echo "Using ENV_ID=$ENV_ID"
 
           get_service_id() {
             printf '%s' "$PROJECT_JSON" | jq -r ".data.project.services.edges[]?.node | select(.name == \"$1\") | .id"
