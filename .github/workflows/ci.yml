@@ -217,7 +217,9 @@ jobs:
           set_var "$BACKEND_ID" CRUCIX_SECRET "${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}"
           set_var "$BACKEND_ID" ELEVENLABS_API_KEY "${{ secrets.ELEVENLABS_API_KEY }}"
           set_var "$BACKEND_ID" ELEVENLABS_VOICE_ID "JBFqnCBsd6RMkjVDRZzb"
-          set_var "$BACKEND_ID" FIREBASE_SERVICE_ACCOUNT "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}"
+          # Encode multiline JSON safely
+          FIREBASE_B64=$(printf "%s" "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" | base64 -w 0)
+          set_var "$BACKEND_ID" FIREBASE_SERVICE_ACCOUNT_B64 "$FIREBASE_B64"
           set_var "$BACKEND_ID" HF_TOKEN "${{ secrets.HF_TOKEN }}"
           set_var "$BACKEND_ID" HUGGINGFACE_VOICE_ID "af_heart"
           set_var "$BACKEND_ID" LLM_API_KEY "${{ secrets.BACKEND_LLM_API_KEY }}"
@@ -242,8 +244,7 @@ jobs:
 
           echo "Deployment complete"
 
-          # original lines removed "ghcr.io/${REPO_LC}/aegis-crucix:sha-${SHA}"
-          deploy_img "$BACKEND_ID" "ghcr.io/${REPO_LC}/aegis-backend:sha-${SHA}"
+          
 
           echo "Deployment complete"
 
