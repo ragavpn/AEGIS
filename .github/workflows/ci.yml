@@ -149,7 +149,7 @@ jobs:
 
           echo "Fetch existing services..."
           SERVICES_JSON=$(api "$(jq -n --arg id \"$PROJECT_ID\" '{query:"query($id: String!){ project(id:$id){ services{ edges{ node{ id name }}}}}", variables:{id:$id}}')")
-          SERVICE_IDS=$(printf '%s' "$SERVICES_JSON" | jq -r '.data.project.services.edges[].node.id // empty')
+          SERVICE_IDS=$(printf '%s' "$SERVICES_JSON" | jq -r '.data.project.services.edges[]?.node.id // empty' || true)
 
           if [ -n "$SERVICE_IDS" ]; then
             echo "Deleting existing services (free plan)..."
