@@ -66,9 +66,13 @@ jobs:
           echo "SUPABASE_ANON_KEY=\"${{ secrets.SUPABASE_ANON_KEY }}\"" >> secrets.properties
           echo "AEGIS_API_BASE_URL=\"${{ vars.BACKEND_PUBLIC_URL || 'https://localhost' }}\"" >> secrets.properties
           touch local.properties
-      - name: Build APK (cached)
+      - name: Grant execute permission for gradlew
         working-directory: ./aegis-android
-        run: ./gradlew assembleDebug --build-cache
+        run: chmod +x gradlew
+
+      - name: Build APK (fresh build)
+        working-directory: ./aegis-android
+        run: ./gradlew assembleDebug
 
       
 
