@@ -7,56 +7,72 @@ on:
     branches: [ "main" ]
 
 jobs:
-  validate:
-    name: Validate Code & Build
+  validate-backend:
+    name: Validate Backend
     runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip-validate]')"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node (cache)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: aegis-backend/package-lock.json
+      - name: Install backend deps
+        working-directory: ./aegis-backend
+        run: npm ci
+      - name: Test backend
+        working-directory: ./aegis-backend
+        run: npm test --if-present
+
+  validate-crucix:
+    name: Validate Crucix
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip-validate]')"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node (cache)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: aegis-crucix/package-lock.json
+      - name: Install crucix deps
+        working-directory: ./aegis-crucix
+        run: npm ci
+      - name: Test crucix
+        working-directory: ./aegis-crucix
+        run: npm test --if-present
+
+  validate-android:
+    name: Validate Android
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip-validate]')"
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-
-      - name: Setup JDK 17
+      - name: Setup JDK
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
           cache: 'gradle'
-
-      - name: Create secrets.properties for Android
+      - name: Prepare Android config
         working-directory: ./aegis-android
         run: |
           echo "SUPABASE_URL=\"${{ secrets.SUPABASE_URL }}\"" > secrets.properties
           echo "SUPABASE_ANON_KEY=\"${{ secrets.SUPABASE_ANON_KEY }}\"" >> secrets.properties
           echo "AEGIS_API_BASE_URL=\"${{ vars.BACKEND_PUBLIC_URL || 'https://localhost' }}\"" >> secrets.properties
           touch local.properties
-
-      - name: Grant execute permission for gradlew
+      - name: Build APK (cached)
         working-directory: ./aegis-android
-        run: chmod +x gradlew
-
-      - name: Create google-services.json
-        run: echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 --decode > aegis-android/app/google-services.json
-
-      - name: Build Android Debug APK (Validation)
-        working-directory: ./aegis-android
-        run: ./gradlew assembleDebug
-
-      - name: Setup Node 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Crucix dependencies
-        working-directory: ./aegis-crucix
-        run: npm ci || npm install
-
-      - name: Run Crucix tests
-        working-directory: ./aegis-crucix
-        run: npm test --if-present
+        run: ./gradlew assembleDebug --build-cache
 
       - name: Install backend dependencies
         working-directory: ./aegis-backend
-        run: npm ci || npm install
+        run: npm ci
 
       - name: Run backend tests
         working-directory: ./aegis-backend
@@ -64,7 +80,7 @@ jobs:
 
   deploy:
     name: Deploy to Railway & GHCR
-    needs: validate
+    needs: [validate-backend, validate-crucix, validate-android]
     if: github.ref == 'refs/heads/main' && vars.DEPLOY == 'true'
     runs-on: ubuntu-latest
 
@@ -87,14 +103,18 @@ jobs:
         run: |
           echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
 
-      - name: Build and push aegis-backend image
+            - name: Build & push images (parallel matrix)
         uses: docker/build-push-action@v5
+        strategy:
+          matrix:
+            service: [aegis-backend, aegis-crucix]
         with:
-          context: ./aegis-backend
+          context: ./
+          file: ./aegis-${{ matrix.service == 'aegis-backend' && 'backend' || 'crucix' }}/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ env.REPO_LC }}/aegis-backend:sha-${{ github.sha }}
-            ghcr.io/${{ env.REPO_LC }}/aegis-backend:latest
+            ghcr.io/${{ env.REPO_LC }}/${{ matrix.service }}:sha-${{ github.sha }}
+            ghcr.io/${{ env.REPO_LC }}/${{ matrix.service }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -109,88 +129,95 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Deploy to Railway (clean recreate services)
+      - name: Deploy to Railway (API only, no CLI)
         env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+          REPO_LC: ${{ env.REPO_LC }}
+          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
 
-          echo "Linking project..."
-          railway link --project "$PROJECT_ID"
+          api() {
+            curl -fsSL https://backboard.railway.com/graphql/v2 \
+              -H "Authorization: Bearer $RAILWAY_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data-raw "$1"
+          }
 
-          echo "Deleting existing services in the project..."
-          SERVICES_JSON=$(curl -fsSL https://backboard.railway.com/graphql/v2 \
-            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-            -H "Content-Type: application/json" \
-            --data-raw "$(jq -n --arg id "$PROJECT_ID" '{query:"query project($id: String!) { project(id: $id) { services { edges { node { id name } } } } }", variables:{id:$id}}')")
-
+          echo "Fetch existing services..."
+          SERVICES_JSON=$(api "$(jq -n --arg id \"$PROJECT_ID\" '{query:"query($id: String!){ project(id:$id){ services{ edges{ node{ id name }}}}}", variables:{id:$id}}')")
           SERVICE_IDS=$(printf '%s' "$SERVICES_JSON" | jq -r '.data.project.services.edges[].node.id // empty')
+
           if [ -n "$SERVICE_IDS" ]; then
-            while IFS= read -r SERVICE_ID; do
-              [ -n "$SERVICE_ID" ] || continue
-              echo "Deleting service id: $SERVICE_ID"
-              curl -fsSL https://backboard.railway.com/graphql/v2 \
-                -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-                -H "Content-Type: application/json" \
-                --data-raw "$(jq -n --arg id "$SERVICE_ID" '{query:"mutation serviceDelete($id: String!) { serviceDelete(id: $id) }", variables:{id:$id}}')" >/dev/null
+            echo "Deleting existing services (free plan)..."
+            while IFS= read -r SID; do
+              [ -n "$SID" ] || continue
+              api "$(jq -n --arg id \"$SID\" '{query:"mutation($id:String!){ serviceDelete(id:$id) }", variables:{id:$id}}')" >/dev/null
             done <<< "$SERVICE_IDS"
           else
             echo "No existing services found"
           fi
 
-          echo "Creating Crucix service from Docker image..."
-          railway add -s aegis-crucix -i ghcr.io/${{ env.REPO_LC }}/aegis-crucix:sha-${{ github.sha }}
+          echo "Create services..."
+          CRUCIX_CREATE=$(api "$(jq -n --arg pid \"$PROJECT_ID\" --arg name \"aegis-crucix\" '{query:"mutation($pid:String!,$name:String!){ serviceCreate(input:{projectId:$pid,name:$name}){ id name } }", variables:{pid:$pid,name:$name}}')")
+          CRUCIX_ID=$(printf '%s' "$CRUCIX_CREATE" | jq -r '.data.serviceCreate.id')
 
-          railway variables set -s aegis-crucix PORT=3117 --skip-deploys
-          railway variables set -s aegis-crucix REFRESH_INTERVAL_MINUTES=15 --skip-deploys
-          railway variables set -s aegis-crucix AEGIS_SECRET=${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }} --skip-deploys
-          railway variables set -s aegis-crucix LLM_API_KEY=${{ secrets.CRUCIX_LLM_API_KEY }} --skip-deploys
-          railway variables set -s aegis-crucix LLM_BASE_URL=https://models.inference.ai.azure.com/chat/completions --skip-deploys
-          railway variables set -s aegis-crucix LLM_MODEL=gpt-4o --skip-deploys
+          BACKEND_CREATE=$(api "$(jq -n --arg pid \"$PROJECT_ID\" --arg name \"aegis-backend\" '{query:"mutation($pid:String!,$name:String!){ serviceCreate(input:{projectId:$pid,name:$name}){ id name } }", variables:{pid:$pid,name:$name}}')")
+          BACKEND_ID=$(printf '%s' "$BACKEND_CREATE" | jq -r '.data.serviceCreate.id')
 
-          echo "Creating Backend service from Docker image..."
-          railway add -s aegis-backend -i ghcr.io/${{ env.REPO_LC }}/aegis-backend:sha-${{ github.sha }}
+          echo "Set variables (Crucix)..."
+          set_var(){ api "$(jq -n --arg sid \"$1\" --arg k \"$2\" --arg v \"$3\" '{query:"mutation($sid:String!,$k:String!,$v:String!){ variableUpsert(input:{serviceId:$sid,key:$k,value:$v}){ id } }", variables:{sid:$sid,k:$k,v:$v}}')" >/dev/null; }
 
-          railway variables set -s aegis-backend NODE_ENV=production --skip-deploys
-          railway variables set -s aegis-backend CRUCIX_BASE_URL=http://aegis-crucix.railway.internal:3117 --skip-deploys
-          railway variables set -s aegis-backend CRUCIX_SECRET=${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }} --skip-deploys
-          railway variables set -s aegis-backend ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }} --skip-deploys
-          railway variables set -s aegis-backend ELEVENLABS_VOICE_ID=JBFqnCBsd6RMkjVDRZzb --skip-deploys
-          printf '%s' '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' | railway variables set -s aegis-backend FIREBASE_SERVICE_ACCOUNT --stdin --skip-deploys
-          railway variables set -s aegis-backend HF_TOKEN=${{ secrets.HF_TOKEN }} --skip-deploys
-          railway variables set -s aegis-backend HUGGINGFACE_VOICE_ID=af_heart --skip-deploys
-          railway variables set -s aegis-backend LLM_API_KEY=${{ secrets.BACKEND_LLM_API_KEY }} --skip-deploys
-          railway variables set -s aegis-backend LLM_BASE_URL=https://models.inference.ai.azure.com/chat/completions --skip-deploys
-          railway variables set -s aegis-backend LLM_MODEL=gpt-4o-mini --skip-deploys
-          railway variables set -s aegis-backend NEO4J_PASSWORD=${{ secrets.NEO4J_PASSWORD }} --skip-deploys
-          railway variables set -s aegis-backend NEO4J_URI=neo4j+s://07c6da35.databases.neo4j.io --skip-deploys
-          railway variables set -s aegis-backend NEO4J_USERNAME=neo4j --skip-deploys
-          railway variables set -s aegis-backend SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }} --skip-deploys
-          railway variables set -s aegis-backend SUPABASE_URL=${{ secrets.SUPABASE_URL }} --skip-deploys
+          set_var "$CRUCIX_ID" PORT "3117"
+          set_var "$CRUCIX_ID" REFRESH_INTERVAL_MINUTES "15"
+          set_var "$CRUCIX_ID" AEGIS_SECRET "${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}"
+          set_var "$CRUCIX_ID" LLM_API_KEY "${{ secrets.CRUCIX_LLM_API_KEY }}"
+          set_var "$CRUCIX_ID" LLM_BASE_URL "https://models.inference.ai.azure.com/chat/completions"
+          set_var "$CRUCIX_ID" LLM_MODEL "gpt-4o"
 
-          echo "Redeploying services..."
-          railway redeploy --service aegis-crucix --yes
-          railway redeploy --service aegis-backend --yes
+          echo "Set variables (Backend)..."
+          set_var "$BACKEND_ID" NODE_ENV "production"
+          set_var "$BACKEND_ID" CRUCIX_BASE_URL "http://aegis-crucix.railway.internal:3117"
+          set_var "$BACKEND_ID" CRUCIX_SECRET "${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}"
+          set_var "$BACKEND_ID" ELEVENLABS_API_KEY "${{ secrets.ELEVENLABS_API_KEY }}"
+          set_var "$BACKEND_ID" ELEVENLABS_VOICE_ID "JBFqnCBsd6RMkjVDRZzb"
+          set_var "$BACKEND_ID" FIREBASE_SERVICE_ACCOUNT "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}"
+          set_var "$BACKEND_ID" HF_TOKEN "${{ secrets.HF_TOKEN }}"
+          set_var "$BACKEND_ID" HUGGINGFACE_VOICE_ID "af_heart"
+          set_var "$BACKEND_ID" LLM_API_KEY "${{ secrets.BACKEND_LLM_API_KEY }}"
+          set_var "$BACKEND_ID" LLM_BASE_URL "https://models.inference.ai.azure.com/chat/completions"
+          set_var "$BACKEND_ID" LLM_MODEL "gpt-4o-mini"
+          set_var "$BACKEND_ID" NEO4J_PASSWORD "${{ secrets.NEO4J_PASSWORD }}"
+          set_var "$BACKEND_ID" NEO4J_URI "neo4j+s://07c6da35.databases.neo4j.io"
+          set_var "$BACKEND_ID" NEO4J_USERNAME "neo4j"
+          set_var "$BACKEND_ID" SUPABASE_SERVICE_KEY "${{ secrets.SUPABASE_SERVICE_KEY }}"
+          set_var "$BACKEND_ID" SUPABASE_URL "${{ secrets.SUPABASE_URL }}"
+
+          echo "Deploy images (from GHCR)..."
+          deploy_img(){ api "$(jq -n --arg sid \"$1\" --arg img \"$2\" '{query:"mutation($sid:String!,$img:String!){ deploymentCreate(input:{serviceId:$sid,source:{image:$img}}){ id } }", variables:{sid:$sid,img:$img}}')" >/dev/null; }
+
+          deploy_img "$CRUCIX_ID" "ghcr.io/${REPO_LC}/aegis-crucix:sha-${SHA}"
+          deploy_img "$BACKEND_ID" "ghcr.io/${REPO_LC}/aegis-backend:sha-${SHA}"
 
           echo "Deployment complete"
 
-      - name: Wait for services to be ready
-        run: sleep 60
-
-      - name: Health check (Backend)
+      - name: Wait for backend to be ready (retry)
         if: vars.BACKEND_PUBLIC_URL != ''
-        run: curl --fail ${{ vars.BACKEND_PUBLIC_URL }}/health
+        run: |
+          for i in {1..20}; do
+            if curl --fail ${{ vars.BACKEND_PUBLIC_URL }}/health; then
+              echo "Backend is up"; exit 0;
+            fi
+            echo "Waiting for backend... ($i)";
+            sleep 5;
+          done
+          echo "Backend failed to become ready"; exit 1
 
-      - name: Health check (Crucix via Backend proxy)
-        if: vars.BACKEND_PUBLIC_URL != ''
-        run: curl --fail ${{ vars.BACKEND_PUBLIC_URL }}/crucix/health
+      
 
   sign-android:
     name: Sign & Release Android APK
