@@ -70,6 +70,9 @@ jobs:
         working-directory: ./aegis-android
         run: chmod +x gradlew
 
+      - name: Create google-services.json
+        run: echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 --decode > aegis-android/app/google-services.json
+
       - name: Build APK (fresh build)
         working-directory: ./aegis-android
         run: ./gradlew assembleDebug
