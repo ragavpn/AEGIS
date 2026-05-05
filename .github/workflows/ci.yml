@@ -164,7 +164,7 @@ jobs:
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Deploy to Railway (API only, no CLI)
+      - name: Deploy to Railway (API only, no CLI, production-safe)
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
@@ -180,30 +180,51 @@ jobs:
               --data-raw "$1"
           }
 
-          echo "Fetch existing services..."
-          SERVICES_JSON=$(api "$(jq -n --arg id \"$PROJECT_ID\" '{query:"query($id: String!){ project(id:$id){ services{ edges{ node{ id name }}}}}", variables:{id:$id}}')")
-          SERVICE_IDS=$(printf '%s' "$SERVICES_JSON" | jq -r '.data.project.services.edges[]?.node.id // empty' || true)
+          echo "Fetch project + environment..."
+          PROJECT_JSON=$(api "$(jq -n --arg id \"$PROJECT_ID\" '{query:"query($id: String!){ project(id:$id){ environments{ edges{ node{ id name } } } services{ edges{ node{ id name } } } } }", variables:{id:$id}}')")
 
-          if [ -n "$SERVICE_IDS" ]; then
-            echo "Deleting existing services (free plan)..."
-            while IFS= read -r SID; do
-              [ -n "$SID" ] || continue
-              api "$(jq -n --arg id \"$SID\" '{query:"mutation($id:String!){ serviceDelete(id:$id) }", variables:{id:$id}}')" >/dev/null
-            done <<< "$SERVICE_IDS"
+          ENV_ID=$(printf '%s' "$PROJECT_JSON" | jq -r '.data.project.environments.edges[0].node.id')
+
+          get_service_id() {
+            printf '%s' "$PROJECT_JSON" | jq -r ".data.project.services.edges[]?.node | select(.name == \"$1\") | .id"
+          }
+
+          create_service() {
+            api "$(jq -n --arg pid \"$PROJECT_ID\" --arg name \"$1\" '{query:"mutation($pid:String!,$name:String!){ serviceCreate(input:{projectId:$pid,name:$name}){ id } }", variables:{pid:$pid,name:$name}}')" | jq -r '.data.serviceCreate.id'
+          }
+
+          CRUCIX_ID=$(get_service_id "aegis-crucix")
+          if [ -z "$CRUCIX_ID" ]; then
+            echo "Creating aegis-crucix..."
+            CRUCIX_ID=$(create_service "aegis-crucix")
           else
-            echo "No existing services found"
+            echo "Reusing aegis-crucix"
           fi
 
-          echo "Create services..."
-          CRUCIX_CREATE=$(api "$(jq -n --arg pid \"$PROJECT_ID\" --arg name \"aegis-crucix\" '{query:"mutation($pid:String!,$name:String!){ serviceCreate(input:{projectId:$pid,name:$name}){ id name } }", variables:{pid:$pid,name:$name}}')")
-          CRUCIX_ID=$(printf '%s' "$CRUCIX_CREATE" | jq -r '.data.serviceCreate.id')
+          BACKEND_ID=$(get_service_id "aegis-backend")
+          if [ -z "$BACKEND_ID" ]; then
+            echo "Creating aegis-backend..."
+            BACKEND_ID=$(create_service "aegis-backend")
+          else
+            echo "Reusing aegis-backend"
+          fi
 
-          BACKEND_CREATE=$(api "$(jq -n --arg pid \"$PROJECT_ID\" --arg name \"aegis-backend\" '{query:"mutation($pid:String!,$name:String!){ serviceCreate(input:{projectId:$pid,name:$name}){ id name } }", variables:{pid:$pid,name:$name}}')")
-          BACKEND_ID=$(printf '%s' "$BACKEND_CREATE" | jq -r '.data.serviceCreate.id')
+          set_var(){
+            echo "Setting variable $2 for service $1";
+            api "$(jq -n \
+              --arg env \"$ENV_ID\" \
+              --arg sid \"$1\" \
+              --arg k \"$2\" \
+              --arg v \"$3\" \
+              '{query:"mutation($env:String!,$sid:String!,$k:String!,$v:String!){ variableUpsert(input:{environmentId:$env,serviceId:$sid,key:$k,value:$v}){ id } }", variables:{env:$env,sid:$sid,k:$k,v:$v}}')" || { echo "Failed setting $2"; exit 1; }
+          }{ api "$(jq -n \
+            --arg env \"$ENV_ID\" \
+            --arg sid \"$1\" \
+            --arg k \"$2\" \
+            --arg v \"$3\" \
+            '{query:"mutation($env:String!,$sid:String!,$k:String!,$v:String!){ variableUpsert(input:{environmentId:$env,serviceId:$sid,key:$k,value:$v}){ id } }", variables:{env:$env,sid:$sid,k:$k,v:$v}}')" >/dev/null; }
 
           echo "Set variables (Crucix)..."
-          set_var(){ api "$(jq -n --arg sid \"$1\" --arg k \"$2\" --arg v \"$3\" '{query:"mutation($sid:String!,$k:String!,$v:String!){ variableUpsert(input:{serviceId:$sid,key:$k,value:$v}){ id } }", variables:{sid:$sid,k:$k,v:$v}}')" >/dev/null; }
-
           set_var "$CRUCIX_ID" PORT "3117"
           set_var "$CRUCIX_ID" REFRESH_INTERVAL_MINUTES "15"
           set_var "$CRUCIX_ID" AEGIS_SECRET "${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}"
@@ -217,7 +238,6 @@ jobs:
           set_var "$BACKEND_ID" CRUCIX_SECRET "${{ secrets.CRUCIX_BACKEND_AEGIS_SECRET }}"
           set_var "$BACKEND_ID" ELEVENLABS_API_KEY "${{ secrets.ELEVENLABS_API_KEY }}"
           set_var "$BACKEND_ID" ELEVENLABS_VOICE_ID "JBFqnCBsd6RMkjVDRZzb"
-          # Encode multiline JSON safely
           FIREBASE_B64=$(printf "%s" "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" | base64 -w 0)
           set_var "$BACKEND_ID" FIREBASE_SERVICE_ACCOUNT_B64 "$FIREBASE_B64"
           set_var "$BACKEND_ID" HF_TOKEN "${{ secrets.HF_TOKEN }}"
@@ -231,9 +251,12 @@ jobs:
           set_var "$BACKEND_ID" SUPABASE_SERVICE_KEY "${{ secrets.SUPABASE_SERVICE_KEY }}"
           set_var "$BACKEND_ID" SUPABASE_URL "${{ secrets.SUPABASE_URL }}"
 
-          echo "Deploy images (from GHCR)..."
-          deploy_img(){ api "$(jq -n --arg sid \"$1\" --arg img \"$2\" '{query:"mutation($sid:String!,$img:String!){ deploymentCreate(input:{serviceId:$sid,source:{image:$img}}){ id } }", variables:{sid:$sid,img:$img}}')" >/dev/null; }
+          deploy_img(){
+            echo "Deploying image $2 to service $1";
+            api "$(jq -n --arg sid \"$1\" --arg img \"$2\" '{query:"mutation($sid:String!,$img:String!){ deploymentCreate(input:{serviceId:$sid,source:{image:$img}}){ id } }", variables:{sid:$sid,img:$img}}')" || { echo "Deploy failed"; exit 1; }
+          }{ api "$(jq -n --arg sid \"$1\" --arg img \"$2\" '{query:"mutation($sid:String!,$img:String!){ deploymentCreate(input:{serviceId:$sid,source:{image:$img}}){ id } }", variables:{sid:$sid,img:$img}}')" >/dev/null; }
 
+          echo "Deploy images (safe incremental)..."
           if [ "${{ needs.changes.outputs.crucix }}" = "true" ] || [ "${{ needs.changes.outputs.workflow }}" = "true" ]; then
             deploy_img "$CRUCIX_ID" "ghcr.io/${REPO_LC}/aegis-crucix:sha-${SHA}"
           fi
@@ -243,6 +266,22 @@ jobs:
           fi
 
           echo "Deployment complete"
+
+          echo "Verifying deployment health..."
+          check_health(){
+            for i in {1..10}; do
+              if curl -fsS "$1/health" >/dev/null; then
+                echo "Service healthy: $1"; return 0;
+              fi
+              echo "Retry $i for $1";
+              sleep 5;
+            done
+            echo "Health check failed for $1"; return 1;
+          }
+
+          if [ "${{ needs.changes.outputs.backend }}" = "true" ] || [ "${{ needs.changes.outputs.workflow }}" = "true" ]; then
+            check_health "${{ vars.BACKEND_PUBLIC_URL }}" || exit 1
+          fi
 
           
 
